@@ -14,56 +14,6 @@
  **/
 package ddf.catalog.source.opensearch;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Serializable;
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import javax.activation.MimeType;
-import javax.activation.MimeTypeParseException;
-import javax.ws.rs.client.ClientException;
-import javax.ws.rs.core.HttpHeaders;
-import javax.ws.rs.core.Response;
-import javax.xml.namespace.QName;
-import javax.xml.transform.TransformerException;
-import javax.xml.xpath.XPathFactory;
-
-import ddf.security.settings.SecuritySettingsService;
-import org.apache.abdera.Abdera;
-import org.apache.abdera.ext.opensearch.OpenSearchConstants;
-import org.apache.abdera.model.Category;
-import org.apache.abdera.model.Element;
-import org.apache.abdera.model.Entry;
-import org.apache.abdera.model.Feed;
-import org.apache.abdera.parser.Parser;
-import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.StringUtils;
-import org.apache.cxf.jaxrs.client.Client;
-import org.apache.cxf.jaxrs.client.WebClient;
-import org.codice.ddf.configuration.ConfigurationWatcher;
-import org.codice.ddf.security.common.jaxrs.RestSecurity;
-import org.geotools.filter.FilterTransformer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.StringReader;
-
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathExpressionException;
-import org.xml.sax.InputSource;
-
 import ddf.catalog.data.ContentType;
 import ddf.catalog.data.Metacard;
 import ddf.catalog.data.Result;
@@ -90,19 +40,93 @@ import ddf.catalog.transform.CatalogTransformerException;
 import ddf.catalog.transform.InputTransformer;
 import ddf.security.SecurityConstants;
 import ddf.security.Subject;
+import ddf.security.service.SecurityServiceException;
+import org.apache.abdera.Abdera;
+import org.apache.abdera.ext.opensearch.OpenSearchConstants;
+import org.apache.abdera.model.Category;
+import org.apache.abdera.model.Element;
+import org.apache.abdera.model.Entry;
+import org.apache.abdera.model.Feed;
+import org.apache.abdera.parser.Parser;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.StringUtils;
+import org.apache.cxf.jaxrs.client.Client;
+import org.apache.cxf.jaxrs.client.WebClient;
+import org.geotools.filter.FilterTransformer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.xml.sax.InputSource;
+
+import javax.activation.MimeType;
+import javax.activation.MimeTypeParseException;
+import javax.ws.rs.client.ClientException;
+import javax.ws.rs.core.HttpHeaders;
+import javax.ws.rs.core.Response;
+import javax.xml.namespace.QName;
+import javax.xml.transform.TransformerException;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Serializable;
+import java.io.StringReader;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Federated site that talks via OpenSearch to the DDF platform. Communication is usually performed
  * via https which requires a keystore and trust store to be provided.
- *
  */
 public final class OpenSearchSource implements FederatedSource, ConfiguredService {
+
+    public static final String NAME = "name";
+
+    public static final String BYTES_TO_SKIP = "BytesToSkip";
+
+    public static final String BYTES_SKIPPED = "BytesSkipped";
 
     static final String BAD_URL_MESSAGE = "Bad url given for remote source";
 
     static final String COULD_NOT_RETRIEVE_RESOURCE_MESSAGE = "Could not retrieve resource";
 
-    public static final String NAME = "name";
+    static final String HEADER_ACCEPT_RANGES = "Accept-Ranges";
+
+    static final String BYTES = "bytes";
+
+    private static final String ORGANIZATION = "DDF";
+
+    private static final String TITLE = "OpenSearch DDF Federated Source";
+
+    private static final String DESCRIPTION = "Queries DDF using the synchronous federated OpenSearch query";
+
+    private static final long AVAILABLE_TIMEOUT_CHECK = 60000; // 60 seconds, in milliseconds
+
+    private static final String URL_SRC_PARAMETER = "src";
+
+    private static final String LOCAL_SEARCH_PARAMETER = "local";
+
+    private static final String HEADER_RANGE = "Range";
+
+    private static final String BYTES_EQUAL = "bytes=";
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(OpenSearchSource.class);
+
+    // expensive creation, meant to be done once
+    private static final Abdera ABDERA = new Abdera();
+
+    protected OpenSearchConnection openSearchConnection;
 
     private boolean isInitialized = false;
 
@@ -121,42 +145,9 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
 
     private InputTransformer inputTransformer;
 
-    private static final String ORGANIZATION = "DDF";
-
-    private static final String TITLE = "OpenSearch DDF Federated Source";
-
-    private static final String DESCRIPTION = "Queries DDF using the synchronous federated OpenSearch query";
-
-    private static final long AVAILABLE_TIMEOUT_CHECK = 60000; // 60 seconds, in milliseconds
-
-    private static final String URL_SRC_PARAMETER = "src";
-
-    private static final String LOCAL_SEARCH_PARAMETER = "local";
-
-    static final String HEADER_ACCEPT_RANGES = "Accept-Ranges";
-
-    private static final String HEADER_RANGE = "Range";
-
-    public static final String BYTES_TO_SKIP = "BytesToSkip";
-
-    public static final String BYTES_SKIPPED = "BytesSkipped";
-
-    static final String BYTES = "bytes";
-
-    private static final String BYTES_EQUAL = "bytes=";
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(OpenSearchSource.class);
-
     private FilterAdapter filterAdapter;
 
-    // expensive creation, meant to be done once
-    private static final Abdera ABDERA = new Abdera();
-
     private String configurationPid;
-
-    protected OpenSearchConnection openSearchConnection;
-
-    private SecuritySettingsService securitySettingsService;
 
     private List<String> parameters;
 
@@ -169,8 +160,6 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
     /**
      * Creates an OpenSearch Site instance. Sets an initial default endpointUrl that can be
      * overwritten using the setter methods.
-     *
-     * @throws ddf.catalog.source.UnsupportedQueryException
      */
     public OpenSearchSource(FilterAdapter filterAdapter) {
         this.filterAdapter = filterAdapter;
@@ -180,7 +169,7 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
      * Called when this OpenSearch Source is created, but after all of the setter methods have been
      * called for each property specified in the metatype.xml file.
      */
-    public void init() {
+    public void init() throws SecurityServiceException {
         isInitialized = true;
         configureClient();
     }
@@ -189,30 +178,38 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
         LOGGER.info("Nothing to destroy.");
     }
 
-    protected void configureClient() {
-        openSearchConnection = new OpenSearchConnection(endpointUrl, filterAdapter, securitySettingsService, username, password);
+    protected void configureClient() throws SecurityServiceException {
+        openSearchConnection = new OpenSearchConnection(endpointUrl, filterAdapter, username,
+                password);
     }
 
     @Override
     public boolean isAvailable() {
         boolean isAvailable = false;
-        if (!lastAvailable
-                || (lastAvailableDate.before(new Date(System.currentTimeMillis()
-                        - AVAILABLE_TIMEOUT_CHECK)))) {
+        if (!lastAvailable || (lastAvailableDate
+                .before(new Date(System.currentTimeMillis() - AVAILABLE_TIMEOUT_CHECK)))) {
 
-            WebClient client = openSearchConnection.getOpenSearchWebClient();
-
-            Response response = null;
+            boolean failed = false;
+            WebClient client = null;
             try {
-                response = client.head();
-            } catch (ClientException e) {
-                LOGGER.warn("Web Client was unable to connect to endpoint.", e);
+                client = openSearchConnection.getOpenSearchWebClient(null);
+            } catch (SecurityServiceException e) {
+                failed = true;
             }
 
-            if(response != null && !(response.getStatus() >= 404 || response.getStatus() == 400
-                    || response.getStatus() == 402)) {
-                isAvailable = true;
-                lastAvailableDate = new Date();
+            if (!failed) {
+                Response response = null;
+                try {
+                    response = client.head();
+                } catch (ClientException e) {
+                    LOGGER.warn("Web Client was unable to connect to endpoint.", e);
+                }
+
+                if (response != null && !(response.getStatus() >= 404 || response.getStatus() == 400
+                        || response.getStatus() == 402)) {
+                    isAvailable = true;
+                    lastAvailableDate = new Date();
+                }
             }
         } else {
             isAvailable = lastAvailable;
@@ -223,7 +220,7 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
 
     @Override
     public boolean isAvailable(SourceMonitor callback) {
-        if(isAvailable()) {
+        if (isAvailable()) {
             callback.setAvailable();
             return true;
         } else {
@@ -240,14 +237,18 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
         Serializable metacardId = queryRequest.getPropertyValue(Metacard.ID);
         SourceResponseImpl response = null;
 
-        WebClient openSearchWebClient = openSearchConnection.getOpenSearchWebClient();
-
         Subject subject = null;
         if (queryRequest.hasProperties()) {
             Object subjectObj = queryRequest.getProperties()
                     .get(SecurityConstants.SECURITY_SUBJECT);
             subject = (Subject) subjectObj;
-            RestSecurity.setSubjectOnClient(subject, openSearchWebClient);
+        }
+
+        WebClient openSearchWebClient;
+        try {
+            openSearchWebClient = openSearchConnection.getOpenSearchWebClient(subject);
+        } catch (SecurityServiceException e) {
+            throw new UnsupportedQueryException(e);
         }
 
         Query query = queryRequest.getQuery();
@@ -258,40 +259,42 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
 
         boolean canDoOpenSearch = setOpenSearchParameters(query, subject, openSearchWebClient);
 
-        if(canDoOpenSearch) {
+        if (canDoOpenSearch) {
 
             InputStream responseStream = performRequest(openSearchWebClient);
 
-            response = new SourceResponseImpl(queryRequest,
-                    new ArrayList<Result>());
+            response = new SourceResponseImpl(queryRequest, new ArrayList<Result>());
 
             if (responseStream != null) {
                 response = processResponse(responseStream, queryRequest);
             }
         } else {
-            Client restClient = openSearchConnection.newRestClient(endpointUrl,
-                    queryRequest.getQuery(),
-                    (String) metacardId, false);
+            Client restClient = openSearchConnection
+                    .newRestClient(endpointUrl, queryRequest.getQuery(), (String) metacardId,
+                            false);
 
             if (restClient != null) {
-                WebClient restWebClient = openSearchConnection.getWebClientFromClient(restClient);
-
-                if (queryRequest.hasProperties()) {
-                    Object subjectObj = queryRequest.getProperties()
-                            .get(SecurityConstants.SECURITY_SUBJECT);
-                    subject = (Subject) subjectObj;
-                    RestSecurity.setSubjectOnClient(subject, restWebClient);
+                WebClient restWebClient;
+                try {
+                    if (queryRequest.hasProperties()) {
+                        Object subjectObj = queryRequest.getProperties()
+                                .get(SecurityConstants.SECURITY_SUBJECT);
+                        subject = (Subject) subjectObj;
+                        restWebClient = openSearchConnection.getRestWebClient(subject);
+                    } else {
+                        restWebClient = openSearchConnection.getRestWebClient(null);
+                    }
+                } catch (SecurityServiceException e) {
+                    throw new UnsupportedQueryException(e);
                 }
 
                 InputStream responseStream = performRequest(restWebClient);
 
                 Metacard metacard = null;
-                List<Result> resultQueue = new ArrayList<Result>();
+                List<Result> resultQueue = new ArrayList<>();
                 try {
                     metacard = inputTransformer.transform(responseStream);
-                } catch (IOException e) {
-                    LOGGER.debug("Problem with transformation.", e);
-                } catch (CatalogTransformerException e) {
+                } catch (IOException | CatalogTransformerException e) {
                     LOGGER.debug("Problem with transformation.", e);
                 }
                 if (metacard != null) {
@@ -322,7 +325,7 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
         InputStream stream = null;
         Object entityObj = clientResponse.getEntity();
         if (entityObj != null) {
-            stream = (InputStream)entityObj;
+            stream = (InputStream) entityObj;
         }
         if (Response.Status.OK.getStatusCode() != clientResponse.getStatus()) {
             String error = "";
@@ -331,11 +334,11 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
                     error = IOUtils.toString(stream);
                 }
             } catch (IOException ioe) {
-                LOGGER.debug("Could not convert error message to a string for output.",
-                        ioe);
+                LOGGER.debug("Could not convert error message to a string for output.", ioe);
             }
-            String errorMsg = "Received error code from remote source (status "
-                    + clientResponse.getStatus() + "): " + error;
+            String errorMsg =
+                    "Received error code from remote source (status " + clientResponse.getStatus()
+                            + "): " + error;
             LOGGER.warn(errorMsg);
             throw new UnsupportedQueryException(errorMsg);
         }
@@ -361,7 +364,8 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
         ContextualSearch contextualFilter = visitor.getContextualSearch();
 
         //TODO fix this so we aren't just triggering off of a contextual query
-        if(contextualFilter != null && StringUtils.isNotEmpty(contextualFilter.getSearchPhrase())) {
+        if (contextualFilter != null && StringUtils
+                .isNotEmpty(contextualFilter.getSearchPhrase())) {
             // All queries must have at least a search phrase to be valid, hence this check
             // for a contextual filter with a non-empty search phrase
             OpenSearchSiteUtil.populateSearchOptions(client, query, subject, parameters);
@@ -381,16 +385,17 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
             if (spatialFilter != null) {
                 if (spatialFilter instanceof SpatialDistanceFilter) {
                     try {
-                        OpenSearchSiteUtil.populateGeospatial(client,
-                                (SpatialDistanceFilter) spatialFilter, shouldConvertToBBox,
-                                parameters);
+                        OpenSearchSiteUtil
+                                .populateGeospatial(client, (SpatialDistanceFilter) spatialFilter,
+                                        shouldConvertToBBox, parameters);
                     } catch (UnsupportedQueryException e) {
                         LOGGER.info("Problem with populating geospatial criteria. ", e);
                     }
                 } else {
                     try {
-                        OpenSearchSiteUtil.populateGeospatial(client, spatialFilter,
-                                shouldConvertToBBox, parameters);
+                        OpenSearchSiteUtil
+                                .populateGeospatial(client, spatialFilter, shouldConvertToBBox,
+                                        parameters);
                     } catch (UnsupportedQueryException e) {
                         LOGGER.info("Problem with populating geospatial criteria. ", e);
                     }
@@ -413,11 +418,12 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
      * @return
      * @throws ddf.catalog.source.UnsupportedQueryException
      */
-    private SourceResponseImpl processResponse(InputStream is, QueryRequest queryRequest) throws UnsupportedQueryException {
-        List<Result> resultQueue = new ArrayList<Result>();
+    private SourceResponseImpl processResponse(InputStream is, QueryRequest queryRequest)
+            throws UnsupportedQueryException {
+        List<Result> resultQueue = new ArrayList<>();
 
         ClassLoader tccl = Thread.currentThread().getContextClassLoader();
-        Parser parser = null;
+        Parser parser;
         org.apache.abdera.model.Document<Feed> atomDoc;
         try {
 
@@ -439,8 +445,8 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
         long totalResults = entries.size();
 
         // OSGi has some weird issues with Abdera's XPath, so just traverse down the element tree
-        Element totalResultsElement = atomDoc.getRoot().getExtension(
-                OpenSearchConstants.TOTAL_RESULTS);
+        Element totalResultsElement = atomDoc.getRoot()
+                .getExtension(OpenSearchConstants.TOTAL_RESULTS);
 
         if (totalResultsElement != null) {
             try {
@@ -462,8 +468,7 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
      * Creates a single response from input parameters. Performs XPath operations on the document to
      * retrieve data not passed in.
      *
-     * @param entry
-     *            a single Atom entry
+     * @param entry a single Atom entry
      * @return single response
      * @throws ddf.catalog.source.UnsupportedQueryException
      */
@@ -530,8 +535,8 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
             ClassLoader tccl2 = Thread.currentThread().getContextClassLoader();
             try {
 
-                Thread.currentThread().setContextClassLoader(
-                        OpenSearchSource.class.getClassLoader());
+                Thread.currentThread()
+                        .setContextClassLoader(OpenSearchSource.class.getClassLoader());
                 List<Category> categories = entry.getCategories();
                 if (!categories.isEmpty() && categories.get(0) != null) {
                     String term = categories.get(0).toString();
@@ -541,7 +546,8 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
                     XPath xpath = XPathFactory.newInstance().newXPath();
                     InputSource inputSource = new InputSource(new StringReader(term));
                     try {
-                        contentType = xpath.evaluate("//*[local-name()='category']/@term", inputSource);
+                        contentType = xpath
+                                .evaluate("//*[local-name()='category']/@term", inputSource);
                         metacard.setContentTypeName(contentType);
                     } catch (XPathExpressionException e) {
                         LOGGER.info("Unable to parse categories for contentType");
@@ -581,18 +587,15 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
 
     // Update the WebClient with a Range header instructing the endpoint to skip bytesToSkip bytes.
     private void constructRangeHeader(WebClient webClient, Long bytesToSkip) {
-        StringBuilder headerValue = new StringBuilder(BYTES_EQUAL);
-        headerValue.append(bytesToSkip.toString());
-        headerValue.append("-");
 
-        webClient.header(HEADER_RANGE, headerValue.toString());
+        webClient.header(HEADER_RANGE, BYTES_EQUAL + bytesToSkip.toString() + "-");
     }
 
     private Metacard parseContent(String content, String id) {
         if (inputTransformer != null && content != null && !content.isEmpty()) {
             try {
-                return inputTransformer.transform(new ByteArrayInputStream(content.getBytes(
-                        StandardCharsets.UTF_8)), id);
+                return inputTransformer.transform(
+                        new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)), id);
             } catch (IOException e) {
                 LOGGER.warn("Unable to read metacard content from Atom feed.", e);
             } catch (CatalogTransformerException e) {
@@ -605,20 +608,6 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
     }
 
     /**
-     * Set URL of the endpoint.
-     *
-     * @param endpointUrl
-     *            Full url of the endpoint.
-     */
-    public void setEndpointUrl(String endpointUrl) {
-        this.endpointUrl = endpointUrl;
-
-        if(isInitialized) {
-            configureClient();
-        }
-    }
-
-    /**
      * Get the URL of the endpoint.
      *
      * @return
@@ -626,6 +615,19 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
     public String getEndpointUrl() {
         LOGGER.trace("getEndpointUrl:  endpointUrl = {}", endpointUrl);
         return endpointUrl;
+    }
+
+    /**
+     * Set URL of the endpoint.
+     *
+     * @param endpointUrl Full url of the endpoint.
+     */
+    public void setEndpointUrl(String endpointUrl) throws SecurityServiceException {
+        this.endpointUrl = endpointUrl;
+
+        if (isInitialized) {
+            configureClient();
+        }
     }
 
     @Override
@@ -647,8 +649,7 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
      * Sets the shortname for this site. This shortname is used to identify the site when performing
      * federated queries.
      *
-     * @param shortname
-     *            Name of this site.
+     * @param shortname Name of this site.
      */
     public void setShortname(String shortname) {
         this.shortname = shortname;
@@ -664,24 +665,12 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
         return "2.0";
     }
 
-    public void setInputTransformer(InputTransformer inputTransformer) {
-        this.inputTransformer = inputTransformer;
-    }
-
     public InputTransformer getInputTransformer() {
         return inputTransformer;
     }
 
-    /**
-     * Sets the boolean flag that indicates all queries executed should be to its local source only,
-     * i.e., no federated or enterprise queries.
-     *
-     * @param localQueryOnly
-     *            true indicates only local queries, false indicates enterprise query
-     */
-    public void setLocalQueryOnly(boolean localQueryOnly) {
-        LOGGER.trace("Setting localQueryOnly = {}", localQueryOnly);
-        this.localQueryOnly = localQueryOnly;
+    public void setInputTransformer(InputTransformer inputTransformer) {
+        this.inputTransformer = inputTransformer;
     }
 
     /**
@@ -695,13 +684,14 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
     }
 
     /**
-     * Sets the boolean flag that tells the code to convert point-radius and polygon geometries to a
-     * bounding box before sending them.
+     * Sets the boolean flag that indicates all queries executed should be to its local source only,
+     * i.e., no federated or enterprise queries.
      *
-     * @param shouldConvertToBBox
+     * @param localQueryOnly true indicates only local queries, false indicates enterprise query
      */
-    public void setShouldConvertToBBox(boolean shouldConvertToBBox) {
-        this.shouldConvertToBBox = shouldConvertToBBox;
+    public void setLocalQueryOnly(boolean localQueryOnly) {
+        LOGGER.trace("Setting localQueryOnly = {}", localQueryOnly);
+        this.localQueryOnly = localQueryOnly;
     }
 
     /**
@@ -714,16 +704,27 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
         return shouldConvertToBBox;
     }
 
+    /**
+     * Sets the boolean flag that tells the code to convert point-radius and polygon geometries to a
+     * bounding box before sending them.
+     *
+     * @param shouldConvertToBBox
+     */
+    public void setShouldConvertToBBox(boolean shouldConvertToBBox) {
+        this.shouldConvertToBBox = shouldConvertToBBox;
+    }
+
     @Override
     public ResourceResponse retrieveResource(URI uri, Map<String, Serializable> requestProperties)
             throws ResourceNotFoundException, ResourceNotSupportedException, IOException {
 
-        Long bytesToSkip = Long.valueOf(0);
+        Long bytesToSkip = (long) 0;
         final String methodName = "retrieveResource";
         LOGGER.trace("ENTRY: {}", methodName);
 
         if (requestProperties == null) {
-            throw new ResourceNotFoundException("Could not retrieve resource with null properties.");
+            throw new ResourceNotFoundException(
+                    "Could not retrieve resource with null properties.");
         }
 
         Serializable serializableId = requestProperties.get(Metacard.ID);
@@ -732,27 +733,29 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
 
         if (serializableId != null) {
             String metacardId = serializableId.toString();
-            Client restClient = openSearchConnection.newRestClient(endpointUrl, null, metacardId, true);
+            Client restClient = openSearchConnection
+                    .newRestClient(endpointUrl, null, metacardId, true);
 
             if (restClient != null) {
-                Object binaryContent = null;
+                Object binaryContent;
                 MimeType mimeType = null;
 
-                WebClient webClient = openSearchConnection.getWebClientFromClient(restClient);
+                WebClient webClient;
+                try {
+                    webClient = openSearchConnection.getRestWebClient(subject);
+                } catch (SecurityServiceException e) {
+                    throw new IOException(e);
+                }
 
                 // If a bytesToSkip property is present add range header
-                Map<String, Serializable> responseProperties = new HashMap<String, Serializable>();
+                Map<String, Serializable> responseProperties = new HashMap<>();
                 if (requestProperties.containsKey(BYTES_TO_SKIP)) {
                     bytesToSkip = (Long) requestProperties.get(BYTES_TO_SKIP);
                     LOGGER.debug("Setting Range header with bytes to skip: {}", bytesToSkip);
                     constructRangeHeader(webClient, bytesToSkip);
                 }
 
-                if(subject != null) {
-                    RestSecurity.setSubjectOnClient(subject, webClient);
-                }
-
-                Response clientResponse = null;
+                Response clientResponse;
                 try {
                     clientResponse = webClient.get();
                 } catch (Exception e) {
@@ -769,10 +772,8 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
                 try {
                     mimeType = new MimeType("application/octet-stream");
                     String content = null;
-                    if(contentType != null) {
-                        if(contentType instanceof String) {
-                            content = (String) contentType;
-                        } else if(contentType instanceof Collection && ((Collection) contentType).size() > 0) {
+                    if (contentType != null) {
+                        if (((Collection) contentType).size() > 0) {
                             content = (String) ((Collection) contentType).iterator().next();
                         }
                     }
@@ -796,7 +797,8 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
                         //DDF-643: Set response property indicating remote JSON Source did the byte skipping
                         // so that Catalog Framework's download manager will not try to also skip bytes.
                         if ((rangeHeader != null) && (rangeHeader.equals(BYTES))) {
-                            LOGGER.info("Adding {} to response properties with value = {}", BYTES_SKIPPED, true);
+                            LOGGER.info("Adding {} to response properties with value = {}",
+                                    BYTES_SKIPPED, true);
                             responseProperties.put(BYTES_SKIPPED, true);
                         }
                     }
@@ -804,9 +806,9 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
                     LOGGER.trace("EXIT: {}", methodName);
 
                     //DDF-643
-                    ResourceResponseImpl resourceResponse = new ResourceResponseImpl(new ResourceImpl(
-                            (InputStream) binaryContent, mimeType, getId()
-                                    + "_Resource_Retrieval:" + System.currentTimeMillis()));
+                    ResourceResponseImpl resourceResponse = new ResourceResponseImpl(
+                            new ResourceImpl((InputStream) binaryContent, mimeType,
+                                    getId() + "_Resource_Retrieval:" + System.currentTimeMillis()));
                     resourceResponse.setProperties(responseProperties);
                     return resourceResponse;
                 }
@@ -830,24 +832,27 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
     @Override
     public Set<String> getOptions(Metacard metacard) {
         LOGGER.trace("ENTERING/EXITING: getOptions");
-        LOGGER.debug("OpenSearch Source \"{}\" does not support resource retrieval options.", getId());
+        LOGGER.debug("OpenSearch Source \"{}\" does not support resource retrieval options.",
+                getId());
         return Collections.emptySet();
     }
 
     @Override
-    public String getConfigurationPid()
-    {
+    public String getConfigurationPid() {
         return configurationPid;
     }
 
     @Override
-    public void setConfigurationPid(String configurationPid)
-    {
+    public void setConfigurationPid(String configurationPid) {
         this.configurationPid = configurationPid;
     }
 
     public List<String> getParameters() {
         return parameters;
+    }
+
+    public void setParameters(String parameters) {
+        this.parameters = Arrays.asList(parameters.split(","));
     }
 
     public void setParameters(List<String> parameters) {
@@ -857,10 +862,6 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
         } else {
             this.parameters = parameters;
         }
-    }
-
-    public void setParameters(String parameters) {
-        this.parameters = Arrays.asList(parameters.split(","));
     }
 
     public String getUsername() {
@@ -880,6 +881,15 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
     }
 
     /**
+     * Gets the receive timeout that is being used for current messages.
+     *
+     * @return the timeout in milliseconds.
+     */
+    public long getReceiveTimeout() {
+        return this.receiveTimeout;
+    }
+
+    /**
      * Sets the receive timeout for messages sent from this provider.
      *
      * @param receiveTimeout timeout in milliseconds. 0 sets it to NOT timeout.
@@ -889,16 +899,4 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
         this.receiveTimeout = receiveTimeout;
     }
 
-    /**
-     * Gets the receive timeout that is being used for current messages.
-     *
-     * @return the timeout in milliseconds.
-     */
-    public long getReceiveTimeout() {
-        return this.receiveTimeout;
-    }
-
-    public void setSecuritySettings(SecuritySettingsService settingsService) {
-        this.securitySettingsService = settingsService;
-    }
 }

@@ -17,14 +17,12 @@ package ddf.catalog.source.opensearch;
 import ddf.catalog.filter.FilterAdapter;
 import ddf.catalog.operation.Query;
 import ddf.catalog.source.UnsupportedQueryException;
-import ddf.security.settings.SecuritySettingsService;
+import ddf.security.Subject;
+import ddf.security.service.SecurityServiceException;
 import org.apache.commons.lang.StringUtils;
-import org.apache.cxf.configuration.jsse.TLSClientParameters;
 import org.apache.cxf.jaxrs.client.Client;
-import org.apache.cxf.jaxrs.client.ClientConfiguration;
-import org.apache.cxf.jaxrs.client.JAXRSClientFactory;
 import org.apache.cxf.jaxrs.client.WebClient;
-import org.apache.cxf.transport.http.HTTPConduit;
+import org.codice.ddf.cxf.SecureCxfClientFactory;
 import org.codice.ddf.endpoints.OpenSearch;
 import org.codice.ddf.endpoints.rest.RESTService;
 import org.slf4j.Logger;
@@ -43,13 +41,9 @@ public class OpenSearchConnection {
     private static final transient Logger LOGGER = LoggerFactory
             .getLogger(OpenSearchConnection.class);
 
-    protected OpenSearch openSearch;
+    protected SecureCxfClientFactory<OpenSearch> openSearchClient;
 
-    protected RESTService restService;
-
-    protected Client openSearchClient;
-
-    protected Client restServiceClient;
+    protected SecureCxfClientFactory restServiceClient;
 
     private FilterAdapter filterAdapter;
 
@@ -57,39 +51,32 @@ public class OpenSearchConnection {
 
     private String password;
 
-    private SecuritySettingsService securitySettingsService;
-
     /**
      * Default Constructor
-     * @param endpointUrl - OpenSearch URL to connect to
+     *
+     * @param endpointUrl   - OpenSearch URL to connect to
      * @param filterAdapter - adapter to translate between DDF REST and OpenSearch
-     * @param securitySettings - Service used to obtain settings for secure communications.
-     * @param username - Basic Auth user name
-     * @param password - Basic Auth password
+     * @param username      - Basic Auth user name
+     * @param password      - Basic Auth password
      */
-    public OpenSearchConnection(String endpointUrl, FilterAdapter filterAdapter,
-            SecuritySettingsService securitySettings, String username, String password) {
+    public OpenSearchConnection(String endpointUrl, FilterAdapter filterAdapter, String username,
+            String password) throws SecurityServiceException {
         this.filterAdapter = filterAdapter;
         this.username = username;
         this.password = password;
-        this.securitySettingsService = securitySettings;
-        openSearch = JAXRSClientFactory.create(endpointUrl, OpenSearch.class);
-        openSearchClient = WebClient.client(openSearch);
+        openSearchClient = new SecureCxfClientFactory<OpenSearch>(endpointUrl, OpenSearch.class,
+                username, password);
 
         RestUrl restUrl = newRestUrl(endpointUrl);
         if (restUrl != null) {
-            restService = JAXRSClientFactory.create(restUrl.buildUrl(), RESTService.class);
-            restServiceClient = WebClient.client(restService);
-
-            if (StringUtils.startsWithIgnoreCase(endpointUrl, "https")) {
-                setTLSOptions(openSearchClient);
-                setTLSOptions(restServiceClient);
-            }
+            restServiceClient = new SecureCxfClientFactory(restUrl.buildUrl(), RESTService.class,
+                    username, password);
         }
     }
 
     /**
      * Generates a DDF REST URL from an OpenSearch URL
+     *
      * @param query
      * @param endpointUrl
      * @return URL in String format
@@ -120,6 +107,7 @@ public class OpenSearchConnection {
 
     /**
      * Creates a new RestUrl object based on an OpenSearch URL
+     *
      * @param url
      * @return RestUrl object for a DDF REST endpoint
      */
@@ -138,52 +126,40 @@ public class OpenSearchConnection {
 
     /**
      * Returns the OpenSearch {@link org.apache.cxf.jaxrs.client.WebClient}
+     *
      * @return {@link org.apache.cxf.jaxrs.client.WebClient}
      */
-    public WebClient getOpenSearchWebClient() {
-        return WebClient.fromClient(openSearchClient);
+    public WebClient getOpenSearchWebClient(Subject subject) throws SecurityServiceException {
+        if (subject == null) {
+            return (WebClient) openSearchClient.getClientForSystem();
+        } else {
+            return (WebClient) openSearchClient.getClientForSubject(subject);
+        }
     }
 
     /**
      * Returns the DDF REST {@link org.apache.cxf.jaxrs.client.WebClient}
+     *
      * @return {@link org.apache.cxf.jaxrs.client.WebClient}
      */
-    public WebClient getRestWebClient() {
+    public WebClient getRestWebClient(Subject subject) throws SecurityServiceException {
         if (restServiceClient != null) {
-            return WebClient.fromClient(restServiceClient);
+            if (subject == null) {
+                return (WebClient) restServiceClient.getClientForSystem();
+            } else {
+                return (WebClient) restServiceClient.getClientForSubject(subject);
+            }
         }
         return null;
     }
 
     /**
-     * Returns an arbitrary {@link org.apache.cxf.jaxrs.client.WebClient} for any {@link org.apache.cxf.jaxrs.client.Client}
-     * @param client {@link org.apache.cxf.jaxrs.client.Client}
-     * @return {@link org.apache.cxf.jaxrs.client.WebClient}
-     */
-    public WebClient getWebClientFromClient(Client client) {
-        return WebClient.fromClient(client);
-    }
-
-    /**
-     * Creates a new OpenSearch {@link org.apache.cxf.jaxrs.client.Client} based on a String URL
-     * @param url
-     * @return {@link org.apache.cxf.jaxrs.client.Client}
-     */
-    public Client newOpenSearchClient(String url) {
-        OpenSearch proxy = JAXRSClientFactory.create(url, OpenSearch.class);
-        Client tmp = WebClient.client(proxy);
-        if (StringUtils.startsWithIgnoreCase(url, "https")) {
-            setTLSOptions(tmp);
-        }
-        return tmp;
-    }
-
-    /**
      * Creates a new DDF REST {@link org.apache.cxf.jaxrs.client.Client} based on an OpenSearch
      * String URL.
-     * @param url - OpenSearch URL
-     * @param query - Query to be performed
-     * @param metacardId - MetacardId to search for
+     *
+     * @param url              - OpenSearch URL
+     * @param query            - Query to be performed
+     * @param metacardId       - MetacardId to search for
      * @param retrieveResource - true if this is a resource request
      * @return {@link org.apache.cxf.jaxrs.client.Client}
      */
@@ -195,7 +171,7 @@ public class OpenSearchConnection {
             RestUrl restUrl = newRestUrl(url);
 
             if (restUrl != null) {
-                if(StringUtils.isNotEmpty(metacardId)) {
+                if (StringUtils.isNotEmpty(metacardId)) {
                     restUrl.setId(metacardId);
                 }
                 restUrl.setRetrieveResource(retrieveResource);
@@ -204,50 +180,11 @@ public class OpenSearchConnection {
         }
         Client tmp = null;
         if (url != null) {
-            RESTService proxy = JAXRSClientFactory.create(url, RESTService.class);
-            tmp = WebClient.client(proxy);
-            if (StringUtils.startsWithIgnoreCase(url, "https")) {
-                setTLSOptions(tmp);
+            try {
+                tmp = (Client) new SecureCxfClientFactory<RESTService>(url, RESTService.class);
+            } catch (SecurityServiceException e) {
             }
         }
         return tmp;
-    }
-
-    /**
-     * Add TLS and Basic Auth credentials to the underlying {@link org.apache.cxf.transport.http.HTTPConduit}
-     * @param client
-     */
-    private void setTLSOptions(Client client) {
-        ClientConfiguration clientConfiguration = WebClient.getConfig(client);
-
-        HTTPConduit httpConduit = clientConfiguration.getHttpConduit();
-
-        if(StringUtils.isNotEmpty(username) && StringUtils.isNotEmpty(password)) {
-            if(httpConduit.getAuthorization() != null) {
-                httpConduit.getAuthorization().setUserName(username);
-                httpConduit.getAuthorization().setPassword(password);
-            }
-        }
-
-        TLSClientParameters tlsParams = securitySettingsService.getTLSParameters();
-        tlsParams.setDisableCNCheck(true);
-        httpConduit.setTlsClientParameters(tlsParams);
-
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
     }
 }

@@ -1,60 +1,18 @@
 /**
  * Copyright (c) Codice Foundation
- * 
+ *
  * This is free software: you can redistribute it and/or modify it under the terms of the GNU Lesser
  * General Public License as published by the Free Software Foundation, either version 3 of the
  * License, or any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
  * even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
  * Lesser General Public License for more details. A copy of the GNU Lesser General Public License
  * is distributed along with this program and can be found at
  * <http://www.gnu.org/licenses/lgpl.html>.
- * 
+ *
  **/
 package ddf.catalog.source.opensearch;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.Serializable;
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.concurrent.ConcurrentHashMap;
-
-import javax.ws.rs.core.HttpHeaders;
-import javax.ws.rs.core.MultivaluedHashMap;
-import javax.ws.rs.core.MultivaluedMap;
-import javax.ws.rs.core.Response;
-
-import junit.framework.Assert;
-
-import org.apache.commons.httpclient.NameValuePair;
-import org.apache.commons.httpclient.util.ParameterParser;
-import org.apache.cxf.jaxrs.client.Client;
-import org.apache.cxf.jaxrs.client.WebClient;
-import org.junit.Ignore;
-import org.junit.Test;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
-import org.opengis.filter.Filter;
 
 import ddf.catalog.data.BinaryContent;
 import ddf.catalog.data.Metacard;
@@ -74,13 +32,52 @@ import ddf.catalog.resource.ResourceNotSupportedException;
 import ddf.catalog.source.UnsupportedQueryException;
 import ddf.catalog.transform.CatalogTransformerException;
 import ddf.catalog.transform.InputTransformer;
+import ddf.security.service.SecurityServiceException;
+import junit.framework.Assert;
+import org.apache.commons.httpclient.NameValuePair;
+import org.apache.commons.httpclient.util.ParameterParser;
+import org.apache.cxf.jaxrs.client.Client;
+import org.apache.cxf.jaxrs.client.WebClient;
+import org.junit.Ignore;
+import org.junit.Test;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+import org.opengis.filter.Filter;
+
+import javax.ws.rs.core.HttpHeaders;
+import javax.ws.rs.core.MultivaluedHashMap;
+import javax.ws.rs.core.MultivaluedMap;
+import javax.ws.rs.core.Response;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.Serializable;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
+
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.is;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.fail;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Matchers.isA;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Tests parts of the {@link OpenSearchSource}
- * 
+ *
  * @author Ashraf Barakat
  * @author ddf.isgs@lmco.com
- * 
  */
 public class TestOpenSearchSource {
 
@@ -94,23 +91,128 @@ public class TestOpenSearchSource {
 
     private static FilterBuilder filterBuilder = new GeotoolsFilterBuilder();
 
+    private static InputStream getSampleAtomStream() {
+        String response =
+                "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:os=\"http://a9.com/-/spec/opensearch/1.1/\">\r\n"
+                        + "    <title type=\"text\">Query Response</title>\r\n"
+                        + "    <updated>2013-01-31T23:22:37.298Z</updated>\r\n"
+                        + "    <id>urn:uuid:a27352c9-f935-45f0-9b8c-5803095164bb</id>\r\n"
+                        + "    <link href=\"#\" rel=\"self\" />\r\n" + "    <author>\r\n"
+                        + "        <name>Codice</name>\r\n" + "    </author>\r\n"
+                        + "    <generator version=\"2.1.0.20130129-1341\">ddf123</generator>\r\n"
+                        + "    <os:totalResults>1</os:totalResults>\r\n"
+                        + "    <os:itemsPerPage>10</os:itemsPerPage>\r\n"
+                        + "    <os:startIndex>1</os:startIndex>\r\n"
+                        + "    <entry xmlns:relevance=\"http://a9.com/-/opensearch/extensions/relevance/1.0/\" xmlns:fs=\"http://a9.com/-/opensearch/extensions/federation/1.0/\"\r\n"
+                        + "        xmlns:georss=\"http://www.georss.org/georss\">\r\n"
+                        + "        <fs:resultSource fs:sourceId=\"ddf123\" />\r\n"
+                        + "        <relevance:score>0.19</relevance:score>\r\n"
+                        + "        <id>urn:catalog:id:ee7a161e01754b9db1872bfe39d1ea09</id>\r\n"
+                        + "        <title type=\"text\">F-15 lands in Libya; Crew Picked Up</title>\r\n"
+                        + "        <updated>2013-01-31T23:22:31.648Z</updated>\r\n"
+                        + "        <published>2013-01-31T23:22:31.648Z</published>\r\n"
+                        + "        <link href=\"http://123.45.67.123:8181/services/catalog/ddf123/ee7a161e01754b9db1872bfe39d1ea09\" rel=\"alternate\" title=\"View Complete Metacard\" />\r\n"
+                        + "        <category term=\"Resource\" />\r\n"
+                        + "        <georss:where xmlns:gml=\"http://www.opengis.net/gml\">\r\n"
+                        + "            <gml:Point>\r\n"
+                        + "                <gml:pos>32.8751900768792 13.1874561309814</gml:pos>\r\n"
+                        + "            </gml:Point>\r\n" + "        </georss:where>\r\n"
+                        + "        <content type=\"application/xml\">\r\n"
+                        + "            <ns3:metacard xmlns:ns3=\"urn:catalog:metacard\" xmlns:ns2=\"http://www.w3.org/1999/xlink\" xmlns:ns1=\"http://www.opengis.net/gml\"\r\n"
+                        + "                xmlns:ns4=\"http://www.w3.org/2001/SMIL20/\" xmlns:ns5=\"http://www.w3.org/2001/SMIL20/Language\" ns1:id=\"4535c53fc8bc4404a1d32a5ce7a29585\">\r\n"
+                        + "                <ns3:type>ddf.metacard</ns3:type>\r\n"
+                        + "                <ns3:source>ddf.distribution</ns3:source>\r\n"
+                        + "                <ns3:geometry name=\"location\">\r\n"
+                        + "                    <ns3:value>\r\n"
+                        + "                        <ns1:Point>\r\n"
+                        + "                            <ns1:pos>32.8751900768792 13.1874561309814</ns1:pos>\r\n"
+                        + "                        </ns1:Point>\r\n"
+                        + "                    </ns3:value>\r\n"
+                        + "                </ns3:geometry>\r\n"
+                        + "                <ns3:dateTime name=\"created\">\r\n"
+                        + "                    <ns3:value>2013-01-31T16:22:31.648-07:00</ns3:value>\r\n"
+                        + "                </ns3:dateTime>\r\n"
+                        + "                <ns3:dateTime name=\"modified\">\r\n"
+                        + "                    <ns3:value>2013-01-31T16:22:31.648-07:00</ns3:value>\r\n"
+                        + "                </ns3:dateTime>\r\n"
+                        + "                <ns3:stringxml name=\"metadata\">\r\n"
+                        + "                    <ns3:value>\r\n"
+                        + "                        <ns6:xml xmlns:ns6=\"urn:sample:namespace\" xmlns=\"urn:sample:namespace\">Example description.</ns6:xml>\r\n"
+                        + "                    </ns3:value>\r\n"
+                        + "                </ns3:stringxml>\r\n"
+                        + "                <ns3:string name=\"metadata-content-type-version\">\r\n"
+                        + "                    <ns3:value>myVersion</ns3:value>\r\n"
+                        + "                </ns3:string>\r\n"
+                        + "                <ns3:string name=\"metadata-content-type\">\r\n"
+                        + "                    <ns3:value>myType</ns3:value>\r\n"
+                        + "                </ns3:string>\r\n"
+                        + "                <ns3:string name=\"title\">\r\n"
+                        + "                    <ns3:value>Example title</ns3:value>\r\n"
+                        + "                </ns3:string>\r\n" + "            </ns3:metacard>\r\n"
+                        + "        </content>\r\n" + "    </entry>\r\n" + "</feed>";
+        return new ByteArrayInputStream(response.getBytes());
+
+    }
+
+    private static InputStream getBinaryData() {
+
+        byte[] sampleBytes = {80, 81, 82};
+
+        return new ByteArrayInputStream(sampleBytes);
+    }
+
+    private static InputStream getSampleXmlStream() {
+
+        String response = "\r\n"
+                + "            <ns3:metacard xmlns:ns3=\"urn:catalog:metacard\" xmlns:ns2=\"http://www.w3.org/1999/xlink\" xmlns:ns1=\"http://www.opengis.net/gml\"\r\n"
+                + "                xmlns:ns4=\"http://www.w3.org/2001/SMIL20/\" xmlns:ns5=\"http://www.w3.org/2001/SMIL20/Language\" ns1:id=\"4535c53fc8bc4404a1d32a5ce7a29585\">\r\n"
+                + "                <ns3:type>ddf.metacard</ns3:type>\r\n"
+                + "                <ns3:source>ddf.distribution</ns3:source>\r\n"
+                + "                <ns3:geometry name=\"location\">\r\n"
+                + "                    <ns3:value>\r\n" + "                        <ns1:Point>\r\n"
+                + "                            <ns1:pos>32.8751900768792 13.1874561309814</ns1:pos>\r\n"
+                + "                        </ns1:Point>\r\n"
+                + "                    </ns3:value>\r\n" + "                </ns3:geometry>\r\n"
+                + "                <ns3:dateTime name=\"created\">\r\n"
+                + "                    <ns3:value>2013-01-31T16:22:31.648-07:00</ns3:value>\r\n"
+                + "                </ns3:dateTime>\r\n"
+                + "                <ns3:dateTime name=\"modified\">\r\n"
+                + "                    <ns3:value>2013-01-31T16:22:31.648-07:00</ns3:value>\r\n"
+                + "                </ns3:dateTime>\r\n"
+                + "                <ns3:stringxml name=\"metadata\">\r\n"
+                + "                    <ns3:value>\r\n"
+                + "                        <ns6:xml xmlns:ns6=\"urn:sample:namespace\" xmlns=\"urn:sample:namespace\">Example description.</ns6:xml>\r\n"
+                + "                    </ns3:value>\r\n" + "                </ns3:stringxml>\r\n"
+                + "                <ns3:string name=\"metadata-content-type-version\">\r\n"
+                + "                    <ns3:value>myVersion</ns3:value>\r\n"
+                + "                </ns3:string>\r\n"
+                + "                <ns3:string name=\"metadata-content-type\">\r\n"
+                + "                    <ns3:value>myType</ns3:value>\r\n"
+                + "                </ns3:string>\r\n"
+                + "                <ns3:string name=\"title\">\r\n"
+                + "                    <ns3:value>Example title</ns3:value>\r\n"
+                + "                </ns3:string>\r\n" + "            </ns3:metacard>\r\n";
+
+        return new ByteArrayInputStream(response.getBytes());
+    }
+
     /**
      * Tests the proper query is sent to the remote source for query by id.
-     * 
+     *
      * @throws UnsupportedQueryException
      * @throws IOException
      * @throws MalformedURLException
      */
     @Test
-    public void testQuery_ById() throws UnsupportedQueryException,
-        IOException {
+    public void testQuery_ById()
+            throws UnsupportedQueryException, IOException, SecurityServiceException {
         WebClient client = mock(WebClient.class);
 
         Response clientResponse = mock(Response.class);
 
         OpenSearchConnection openSearchConnection = mock(OpenSearchConnection.class);
 
-        when(openSearchConnection.getOpenSearchWebClient()).thenReturn(client);
+        when(openSearchConnection.getOpenSearchWebClient(null)).thenReturn(client);
 
         when(client.get()).thenReturn(clientResponse);
 
@@ -118,18 +220,21 @@ public class TestOpenSearchSource {
 
         Client proxy = mock(Client.class);
 
-        when(openSearchConnection.newRestClient(any(String.class), any(Query.class), any(String.class), any(Boolean.class))).thenReturn(proxy);
+        when(openSearchConnection
+                .newRestClient(any(String.class), any(Query.class), any(String.class),
+                        any(Boolean.class))).thenReturn(proxy);
 
-        when(openSearchConnection.getWebClientFromClient(proxy)).thenReturn(client);
+//        when(openSearchConnection.getWebClientFromClient(proxy)).thenReturn(client);
 
-        when(clientResponse.getEntity()).thenReturn(
-                new BinaryContentImpl(getSampleXmlStream()).getInputStream());
+        when(clientResponse.getEntity())
+                .thenReturn(new BinaryContentImpl(getSampleXmlStream()).getInputStream());
 
         OpenSearchSource source = new OpenSearchSource(FILTER_ADAPTER);
         source.setInputTransformer(getMockInputTransformer());
         source.setEndpointUrl("http://localhost:8181/services/catalog/query");
         source.init();
-        source.setParameters("q,src,mr,start,count,mt,dn,lat,lon,radius,bbox,polygon,dtstart,dtend,dateName,filter,sort");
+        source.setParameters(
+                "q,src,mr,start,count,mt,dn,lat,lon,radius,bbox,polygon,dtstart,dtend,dateName,filter,sort");
 
         source.openSearchConnection = openSearchConnection;
 
@@ -145,8 +250,9 @@ public class TestOpenSearchSource {
     @Test
     @Ignore
     // Ignored because Content Type support has yet to be added.
-    public void testQuery_ByContentType() throws UnsupportedQueryException,
-        IOException, URISyntaxException {
+    public void testQuery_ByContentType()
+            throws UnsupportedQueryException, IOException, URISyntaxException,
+            SecurityServiceException {
 
         // given
         FirstArgumentCapture answer = new FirstArgumentCapture(getSampleAtomStream());
@@ -166,28 +272,30 @@ public class TestOpenSearchSource {
     }
 
     @Test
-    public void testQuery_BySearchPhrase() throws UnsupportedQueryException, URISyntaxException,
-        IOException {
+    public void testQuery_BySearchPhrase()
+            throws UnsupportedQueryException, URISyntaxException, IOException,
+            SecurityServiceException {
         WebClient client = mock(WebClient.class);
 
         Response clientResponse = mock(Response.class);
 
         OpenSearchConnection openSearchConnection = mock(OpenSearchConnection.class);
 
-        when(openSearchConnection.getOpenSearchWebClient()).thenReturn(client);
+        when(openSearchConnection.getOpenSearchWebClient(null)).thenReturn(client);
 
         when(client.get()).thenReturn(clientResponse);
 
         when(clientResponse.getStatus()).thenReturn(Response.Status.OK.getStatusCode());
-        
-        when(clientResponse.getEntity()).thenReturn(
-                new BinaryContentImpl(getSampleAtomStream()).getInputStream());
+
+        when(clientResponse.getEntity())
+                .thenReturn(new BinaryContentImpl(getSampleAtomStream()).getInputStream());
 
         OpenSearchSource source = new OpenSearchSource(FILTER_ADAPTER);
         source.setInputTransformer(getMockInputTransformer());
         source.setEndpointUrl("http://localhost:8181/services/catalog/query");
         source.init();
-        source.setParameters("q,src,mr,start,count,mt,dn,lat,lon,radius,bbox,polygon,dtstart,dtend,dateName,filter,sort");
+        source.setParameters(
+                "q,src,mr,start,count,mt,dn,lat,lon,radius,bbox,polygon,dtstart,dtend,dateName,filter,sort");
 
         source.openSearchConnection = openSearchConnection;
 
@@ -207,22 +315,23 @@ public class TestOpenSearchSource {
     }
 
     @Test
-    public void testQuery_BySearchPhrase_ContentTypeSet() throws UnsupportedQueryException, URISyntaxException,
-        IOException {
+    public void testQuery_BySearchPhrase_ContentTypeSet()
+            throws UnsupportedQueryException, URISyntaxException, IOException,
+            SecurityServiceException {
         WebClient client = mock(WebClient.class);
 
         Response clientResponse = mock(Response.class);
 
         OpenSearchConnection openSearchConnection = mock(OpenSearchConnection.class);
 
-        when(openSearchConnection.getOpenSearchWebClient()).thenReturn(client);
+        when(openSearchConnection.getOpenSearchWebClient(null)).thenReturn(client);
 
         when(client.get()).thenReturn(clientResponse);
 
         when(clientResponse.getStatus()).thenReturn(Response.Status.OK.getStatusCode());
-        
-        when(clientResponse.getEntity()).thenReturn(
-                new BinaryContentImpl(getSampleAtomStream()).getInputStream());
+
+        when(clientResponse.getEntity())
+                .thenReturn(new BinaryContentImpl(getSampleAtomStream()).getInputStream());
 
         OpenSearchSource source = new OpenSearchSource(FILTER_ADAPTER);
         InputTransformer inputTransformer = mock(InputTransformer.class);
@@ -234,8 +343,8 @@ public class TestOpenSearchSource {
 
         try {
             when(inputTransformer.transform(isA(InputStream.class))).thenReturn(generatedMetacard);
-            when(inputTransformer.transform(isA(InputStream.class), isA(String.class))).thenReturn(
-                    generatedMetacard);
+            when(inputTransformer.transform(isA(InputStream.class), isA(String.class)))
+                    .thenReturn(generatedMetacard);
         } catch (IOException e) {
             fail();
         } catch (CatalogTransformerException e) {
@@ -244,14 +353,15 @@ public class TestOpenSearchSource {
         source.setInputTransformer(inputTransformer);
         source.setEndpointUrl("http://localhost:8181/services/catalog/query");
         source.init();
-        source.setParameters("q,src,mr,start,count,mt,dn,lat,lon,radius,bbox,polygon,dtstart,dtend,dateName,filter,sort");
+        source.setParameters(
+                "q,src,mr,start,count,mt,dn,lat,lon,radius,bbox,polygon,dtstart,dtend,dateName,filter,sort");
 
         source.openSearchConnection = openSearchConnection;
 
         Filter filter = filterBuilder.attribute(Metacard.METADATA).like()
                 .text(SAMPLE_SEARCH_PHRASE);
         SourceResponse response = source.query(new QueryRequestImpl(new QueryImpl(filter)));
-        
+
         Assert.assertEquals(1, response.getHits());
         List<Result> results = response.getResults();
         Assert.assertTrue(results.size() == 1);
@@ -262,8 +372,9 @@ public class TestOpenSearchSource {
     }
 
     @Test
-    public void testQueryAnyText() throws UnsupportedQueryException, URISyntaxException,
-        IOException {
+    public void testQueryAnyText()
+            throws UnsupportedQueryException, URISyntaxException, IOException,
+            SecurityServiceException {
         WebClient client = mock(WebClient.class);
 
         Response clientResponse = mock(Response.class);
@@ -272,7 +383,7 @@ public class TestOpenSearchSource {
 
         OpenSearchConnection openSearchConnection = mock(OpenSearchConnection.class);
 
-        when(openSearchConnection.getOpenSearchWebClient()).thenReturn(client);
+        when(openSearchConnection.getOpenSearchWebClient(null)).thenReturn(client);
 
         when(client.get()).thenReturn(clientResponse);
 
@@ -280,7 +391,8 @@ public class TestOpenSearchSource {
         source.setInputTransformer(getMockInputTransformer());
         source.setEndpointUrl("http://localhost:8181/services/catalog/query");
         source.init();
-        source.setParameters("q,src,mr,start,count,mt,dn,lat,lon,radius,bbox,polygon,dtstart,dtend,dateName,filter,sort");
+        source.setParameters(
+                "q,src,mr,start,count,mt,dn,lat,lon,radius,bbox,polygon,dtstart,dtend,dateName,filter,sort");
 
         source.openSearchConnection = openSearchConnection;
 
@@ -295,18 +407,18 @@ public class TestOpenSearchSource {
     }
 
     @Test(expected = UnsupportedQueryException.class)
-    public void testQueryBadResponse() throws UnsupportedQueryException,
-            IOException {
+    public void testQueryBadResponse()
+            throws UnsupportedQueryException, IOException, SecurityServiceException {
         WebClient client = mock(WebClient.class);
 
         Response clientResponse = mock(Response.class);
 
-        when(clientResponse.getStatus()).thenReturn(
-                Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
+        when(clientResponse.getStatus())
+                .thenReturn(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
 
         OpenSearchConnection openSearchConnection = mock(OpenSearchConnection.class);
 
-        when(openSearchConnection.getOpenSearchWebClient()).thenReturn(client);
+        when(openSearchConnection.getOpenSearchWebClient(null)).thenReturn(client);
 
         when(client.get()).thenReturn(clientResponse);
 
@@ -314,7 +426,8 @@ public class TestOpenSearchSource {
         source.setInputTransformer(getMockInputTransformer());
         source.setEndpointUrl("http://localhost:8181/services/catalog/query");
         source.init();
-        source.setParameters("q,src,mr,start,count,mt,dn,lat,lon,radius,bbox,polygon,dtstart,dtend,dateName,filter,sort");
+        source.setParameters(
+                "q,src,mr,start,count,mt,dn,lat,lon,radius,bbox,polygon,dtstart,dtend,dateName,filter,sort");
 
         source.openSearchConnection = openSearchConnection;
 
@@ -327,14 +440,15 @@ public class TestOpenSearchSource {
 
     /**
      * Basic retrieve product case. Tests the url sent to the connection is correct.
-     * 
+     *
      * @throws ResourceNotSupportedException
      * @throws IOException
      * @throws ResourceNotFoundException
      */
     @Test
-    public void testRetrieveResource() throws ResourceNotSupportedException, IOException,
-        ResourceNotFoundException {
+    public void testRetrieveResource()
+            throws ResourceNotSupportedException, IOException, ResourceNotFoundException,
+            SecurityServiceException {
 
         // given
         FirstArgumentCapture answer = new FirstArgumentCapture(getBinaryData());
@@ -351,10 +465,10 @@ public class TestOpenSearchSource {
         Assert.assertEquals(3, response.getResource().getByteArray().length);
     }
 
-
     @Test
-    public void testRetrieveResourceWithBytesToSkip() throws ResourceNotSupportedException, IOException,
-            ResourceNotFoundException {
+    public void testRetrieveResourceWithBytesToSkip()
+            throws ResourceNotSupportedException, IOException, ResourceNotFoundException,
+            SecurityServiceException {
 
         // given
         FirstArgumentCapture answer = new FirstArgumentCapture(getBinaryData());
@@ -376,18 +490,19 @@ public class TestOpenSearchSource {
 
     /**
      * Given all null params, nothing will be returned, expect an exception.
-     * 
+     *
      * @throws ResourceNotSupportedException
      */
     @Test
-    public void testRetrieveNullProduct() throws ResourceNotSupportedException, IOException {
+    public void testRetrieveNullProduct()
+            throws ResourceNotSupportedException, IOException, SecurityServiceException {
         WebClient client = mock(WebClient.class);
 
         Response clientResponse = mock(Response.class);
 
         OpenSearchConnection openSearchConnection = mock(OpenSearchConnection.class);
 
-        when(openSearchConnection.getOpenSearchWebClient()).thenReturn(client);
+        when(openSearchConnection.getOpenSearchWebClient(null)).thenReturn(client);
 
         when(client.get()).thenReturn(clientResponse);
 
@@ -414,14 +529,15 @@ public class TestOpenSearchSource {
     }
 
     @Test
-    public void testRetrieveProductUriSyntaxException() throws ResourceNotSupportedException, IOException {
+    public void testRetrieveProductUriSyntaxException()
+            throws ResourceNotSupportedException, IOException, SecurityServiceException {
         WebClient client = mock(WebClient.class);
 
         Response clientResponse = mock(Response.class);
 
         OpenSearchConnection openSearchConnection = mock(OpenSearchConnection.class);
 
-        when(openSearchConnection.getOpenSearchWebClient()).thenReturn(client);
+        when(openSearchConnection.getOpenSearchWebClient(null)).thenReturn(client);
 
         when(client.get()).thenReturn(clientResponse);
 
@@ -446,20 +562,22 @@ public class TestOpenSearchSource {
             /*
              * this exception should have been thrown.
              */
-            assertThat(e.getMessage(), containsString(OpenSearchSource.COULD_NOT_RETRIEVE_RESOURCE_MESSAGE));
+            assertThat(e.getMessage(),
+                    containsString(OpenSearchSource.COULD_NOT_RETRIEVE_RESOURCE_MESSAGE));
         }
 
     }
 
     @Test
-    public void testRetrieveProductMalformedUrlException() throws ResourceNotSupportedException, IOException {
+    public void testRetrieveProductMalformedUrlException()
+            throws ResourceNotSupportedException, IOException, SecurityServiceException {
         WebClient client = mock(WebClient.class);
 
         Response clientResponse = mock(Response.class);
 
         OpenSearchConnection openSearchConnection = mock(OpenSearchConnection.class);
 
-        when(openSearchConnection.getOpenSearchWebClient()).thenReturn(client);
+        when(openSearchConnection.getOpenSearchWebClient(null)).thenReturn(client);
 
         when(client.get()).thenReturn(clientResponse);
 
@@ -484,7 +602,8 @@ public class TestOpenSearchSource {
             /*
              * this exception should have been thrown.
              */
-            assertThat(e.getMessage(), containsString(OpenSearchSource.COULD_NOT_RETRIEVE_RESOURCE_MESSAGE));
+            assertThat(e.getMessage(),
+                    containsString(OpenSearchSource.COULD_NOT_RETRIEVE_RESOURCE_MESSAGE));
         }
 
     }
@@ -501,25 +620,28 @@ public class TestOpenSearchSource {
 
         OpenSearchConnection openSearchConnection = mock(OpenSearchConnection.class);
 
-        when(openSearchConnection.getOpenSearchWebClient()).thenReturn(client);
+        when(openSearchConnection.getOpenSearchWebClient(null)).thenReturn(client);
 
         when(client.get()).thenReturn(clientResponse);
 
         Client proxy = mock(Client.class);
 
-        when(openSearchConnection.newRestClient(any(String.class), any(Query.class), any(String.class), any(Boolean.class))).thenReturn(proxy);
+        when(openSearchConnection
+                .newRestClient(any(String.class), any(Query.class), any(String.class),
+                        any(Boolean.class))).thenReturn(proxy);
 
-        when(openSearchConnection.getWebClientFromClient(proxy)).thenReturn(client);
+//        when(openSearchConnection.getWebClientFromClient(proxy)).thenReturn(client);
 
-        when(clientResponse.getEntity()).thenReturn(
-                new BinaryContentImpl(getSampleXmlStream()).getInputStream()).thenReturn(
-                new BinaryContentImpl(getSampleAtomStream()).getInputStream());
+        when(clientResponse.getEntity())
+                .thenReturn(new BinaryContentImpl(getSampleXmlStream()).getInputStream())
+                .thenReturn(new BinaryContentImpl(getSampleAtomStream()).getInputStream());
         OpenSearchSource source = new OpenSearchSource(FILTER_ADAPTER);
         source.setLocalQueryOnly(true);
         source.setInputTransformer(getMockInputTransformer());
         source.setEndpointUrl("http://localhost:8181/services/catalog/query");
         source.init();
-        source.setParameters("q,src,mr,start,count,mt,dn,lat,lon,radius,bbox,polygon,dtstart,dtend,dateName,filter,sort");
+        source.setParameters(
+                "q,src,mr,start,count,mt,dn,lat,lon,radius,bbox,polygon,dtstart,dtend,dateName,filter,sort");
 
         source.openSearchConnection = openSearchConnection;
 
@@ -548,7 +670,7 @@ public class TestOpenSearchSource {
     }
 
     private List<NameValuePair> extractQueryParams(FirstArgumentCapture answer)
-        throws MalformedURLException, URISyntaxException {
+            throws MalformedURLException, URISyntaxException {
         URL url = new URI(answer.getInputArg()).toURL();
         ParameterParser paramParser = new ParameterParser();
         List<NameValuePair> pairs = paramParser.parse(url.getQuery(), '&');
@@ -577,14 +699,14 @@ public class TestOpenSearchSource {
 
     /**
      * Verifies that the rest of the entries don't have a corresponding value
-     * 
+     *
      * @param nvpMap
      */
     private void verifyAllEntriesBlank(ConcurrentHashMap<String, String> nvpMap) {
         for (Entry<String, String> entry : nvpMap.entrySet()) {
 
-            String errorMessage = "[" + entry.getKey() + "]"
-                    + " should not have a corresponding value.";
+            String errorMessage =
+                    "[" + entry.getKey() + "]" + " should not have a corresponding value.";
 
             assertThat(errorMessage, entry.getValue(), is(""));
         }
@@ -600,26 +722,29 @@ public class TestOpenSearchSource {
     }
 
     private OpenSearchSource givenSource(Answer<BinaryContent> answer)
-        throws IOException {
+            throws IOException, SecurityServiceException {
         WebClient client = mock(WebClient.class);
 
         OpenSearchConnection openSearchConnection = mock(OpenSearchConnection.class);
 
         Client proxy = mock(Client.class);
 
-        when(openSearchConnection.newRestClient(any(String.class), any(Query.class), any(String.class), any(Boolean.class))).thenReturn(proxy);
+        when(openSearchConnection
+                .newRestClient(any(String.class), any(Query.class), any(String.class),
+                        any(Boolean.class))).thenReturn(proxy);
 
-        when(openSearchConnection.getWebClientFromClient(proxy)).thenReturn(client);
+//        when(openSearchConnection.getWebClientFromClient(proxy)).thenReturn(client);
 
         Response clientResponse = mock(Response.class);
 
         when(client.get()).thenReturn(clientResponse);
 
         when(clientResponse.getEntity()).thenReturn(getBinaryData());
-        
-        when(clientResponse.getHeaderString(eq(OpenSearchSource.HEADER_ACCEPT_RANGES))).thenReturn(OpenSearchSource.BYTES);
 
-        when(openSearchConnection.getOpenSearchWebClient()).thenReturn(client);
+        when(clientResponse.getHeaderString(eq(OpenSearchSource.HEADER_ACCEPT_RANGES)))
+                .thenReturn(OpenSearchSource.BYTES);
+
+        when(openSearchConnection.getOpenSearchWebClient(null)).thenReturn(client);
 
         MultivaluedMap<String, Object> headers = new MultivaluedHashMap<String, Object>();
         headers.put(HttpHeaders.CONTENT_TYPE, Arrays.<Object>asList("application/octet-stream"));
@@ -628,7 +753,8 @@ public class TestOpenSearchSource {
 
         OpenSearchSource source = new OpenSearchSource(FILTER_ADAPTER);
         source.setEndpointUrl("http://localhost:8181/services/catalog/query");
-        source.setParameters("q,src,mr,start,count,mt,dn,lat,lon,radius,bbox,polygon,dtstart,dtend,dateName,filter,sort");
+        source.setParameters(
+                "q,src,mr,start,count,mt,dn,lat,lon,radius,bbox,polygon,dtstart,dtend,dateName,filter,sort");
         source.init();
         source.setLocalQueryOnly(true);
         source.setInputTransformer(getMockInputTransformer());
@@ -643,8 +769,8 @@ public class TestOpenSearchSource {
 
         try {
             when(inputTransformer.transform(isA(InputStream.class))).thenReturn(generatedMetacard);
-            when(inputTransformer.transform(isA(InputStream.class), isA(String.class))).thenReturn(
-                    generatedMetacard);
+            when(inputTransformer.transform(isA(InputStream.class), isA(String.class)))
+                    .thenReturn(generatedMetacard);
         } catch (IOException e) {
             fail();
         } catch (CatalogTransformerException e) {
@@ -665,119 +791,11 @@ public class TestOpenSearchSource {
         return "<xml></xml>";
     }
 
-    private static InputStream getSampleAtomStream() {
-        String response = "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:os=\"http://a9.com/-/spec/opensearch/1.1/\">\r\n"
-                + "    <title type=\"text\">Query Response</title>\r\n"
-                + "    <updated>2013-01-31T23:22:37.298Z</updated>\r\n"
-                + "    <id>urn:uuid:a27352c9-f935-45f0-9b8c-5803095164bb</id>\r\n"
-                + "    <link href=\"#\" rel=\"self\" />\r\n"
-                + "    <author>\r\n"
-                + "        <name>Codice</name>\r\n"
-                + "    </author>\r\n"
-                + "    <generator version=\"2.1.0.20130129-1341\">ddf123</generator>\r\n"
-                + "    <os:totalResults>1</os:totalResults>\r\n"
-                + "    <os:itemsPerPage>10</os:itemsPerPage>\r\n"
-                + "    <os:startIndex>1</os:startIndex>\r\n"
-                + "    <entry xmlns:relevance=\"http://a9.com/-/opensearch/extensions/relevance/1.0/\" xmlns:fs=\"http://a9.com/-/opensearch/extensions/federation/1.0/\"\r\n"
-                + "        xmlns:georss=\"http://www.georss.org/georss\">\r\n"
-                + "        <fs:resultSource fs:sourceId=\"ddf123\" />\r\n"
-                + "        <relevance:score>0.19</relevance:score>\r\n"
-                + "        <id>urn:catalog:id:ee7a161e01754b9db1872bfe39d1ea09</id>\r\n"
-                + "        <title type=\"text\">F-15 lands in Libya; Crew Picked Up</title>\r\n"
-                + "        <updated>2013-01-31T23:22:31.648Z</updated>\r\n"
-                + "        <published>2013-01-31T23:22:31.648Z</published>\r\n"
-                + "        <link href=\"http://123.45.67.123:8181/services/catalog/ddf123/ee7a161e01754b9db1872bfe39d1ea09\" rel=\"alternate\" title=\"View Complete Metacard\" />\r\n"
-                + "        <category term=\"Resource\" />\r\n"
-                + "        <georss:where xmlns:gml=\"http://www.opengis.net/gml\">\r\n"
-                + "            <gml:Point>\r\n"
-                + "                <gml:pos>32.8751900768792 13.1874561309814</gml:pos>\r\n"
-                + "            </gml:Point>\r\n"
-                + "        </georss:where>\r\n"
-                + "        <content type=\"application/xml\">\r\n"
-                + "            <ns3:metacard xmlns:ns3=\"urn:catalog:metacard\" xmlns:ns2=\"http://www.w3.org/1999/xlink\" xmlns:ns1=\"http://www.opengis.net/gml\"\r\n"
-                + "                xmlns:ns4=\"http://www.w3.org/2001/SMIL20/\" xmlns:ns5=\"http://www.w3.org/2001/SMIL20/Language\" ns1:id=\"4535c53fc8bc4404a1d32a5ce7a29585\">\r\n"
-                + "                <ns3:type>ddf.metacard</ns3:type>\r\n"
-                + "                <ns3:source>ddf.distribution</ns3:source>\r\n"
-                + "                <ns3:geometry name=\"location\">\r\n"
-                + "                    <ns3:value>\r\n"
-                + "                        <ns1:Point>\r\n"
-                + "                            <ns1:pos>32.8751900768792 13.1874561309814</ns1:pos>\r\n"
-                + "                        </ns1:Point>\r\n"
-                + "                    </ns3:value>\r\n"
-                + "                </ns3:geometry>\r\n"
-                + "                <ns3:dateTime name=\"created\">\r\n"
-                + "                    <ns3:value>2013-01-31T16:22:31.648-07:00</ns3:value>\r\n"
-                + "                </ns3:dateTime>\r\n"
-                + "                <ns3:dateTime name=\"modified\">\r\n"
-                + "                    <ns3:value>2013-01-31T16:22:31.648-07:00</ns3:value>\r\n"
-                + "                </ns3:dateTime>\r\n"
-                + "                <ns3:stringxml name=\"metadata\">\r\n"
-                + "                    <ns3:value>\r\n"
-                + "                        <ns6:xml xmlns:ns6=\"urn:sample:namespace\" xmlns=\"urn:sample:namespace\">Example description.</ns6:xml>\r\n"
-                + "                    </ns3:value>\r\n"
-                + "                </ns3:stringxml>\r\n"
-                + "                <ns3:string name=\"metadata-content-type-version\">\r\n"
-                + "                    <ns3:value>myVersion</ns3:value>\r\n"
-                + "                </ns3:string>\r\n"
-                + "                <ns3:string name=\"metadata-content-type\">\r\n"
-                + "                    <ns3:value>myType</ns3:value>\r\n"
-                + "                </ns3:string>\r\n"
-                + "                <ns3:string name=\"title\">\r\n"
-                + "                    <ns3:value>Example title</ns3:value>\r\n"
-                + "                </ns3:string>\r\n"
-                + "            </ns3:metacard>\r\n"
-                + "        </content>\r\n" + "    </entry>\r\n" + "</feed>";
-        return new ByteArrayInputStream(response.getBytes());
-
-    }
-
-    private static InputStream getBinaryData() {
-
-        byte[] sampleBytes = {80, 81, 82};
-
-        return new ByteArrayInputStream(sampleBytes);
-    }
-
-    private static InputStream getSampleXmlStream() {
-
-        String response = "\r\n"
-                + "            <ns3:metacard xmlns:ns3=\"urn:catalog:metacard\" xmlns:ns2=\"http://www.w3.org/1999/xlink\" xmlns:ns1=\"http://www.opengis.net/gml\"\r\n"
-                + "                xmlns:ns4=\"http://www.w3.org/2001/SMIL20/\" xmlns:ns5=\"http://www.w3.org/2001/SMIL20/Language\" ns1:id=\"4535c53fc8bc4404a1d32a5ce7a29585\">\r\n"
-                + "                <ns3:type>ddf.metacard</ns3:type>\r\n"
-                + "                <ns3:source>ddf.distribution</ns3:source>\r\n"
-                + "                <ns3:geometry name=\"location\">\r\n"
-                + "                    <ns3:value>\r\n"
-                + "                        <ns1:Point>\r\n"
-                + "                            <ns1:pos>32.8751900768792 13.1874561309814</ns1:pos>\r\n"
-                + "                        </ns1:Point>\r\n"
-                + "                    </ns3:value>\r\n"
-                + "                </ns3:geometry>\r\n"
-                + "                <ns3:dateTime name=\"created\">\r\n"
-                + "                    <ns3:value>2013-01-31T16:22:31.648-07:00</ns3:value>\r\n"
-                + "                </ns3:dateTime>\r\n"
-                + "                <ns3:dateTime name=\"modified\">\r\n"
-                + "                    <ns3:value>2013-01-31T16:22:31.648-07:00</ns3:value>\r\n"
-                + "                </ns3:dateTime>\r\n"
-                + "                <ns3:stringxml name=\"metadata\">\r\n"
-                + "                    <ns3:value>\r\n"
-                + "                        <ns6:xml xmlns:ns6=\"urn:sample:namespace\" xmlns=\"urn:sample:namespace\">Example description.</ns6:xml>\r\n"
-                + "                    </ns3:value>\r\n"
-                + "                </ns3:stringxml>\r\n"
-                + "                <ns3:string name=\"metadata-content-type-version\">\r\n"
-                + "                    <ns3:value>myVersion</ns3:value>\r\n"
-                + "                </ns3:string>\r\n"
-                + "                <ns3:string name=\"metadata-content-type\">\r\n"
-                + "                    <ns3:value>myType</ns3:value>\r\n"
-                + "                </ns3:string>\r\n"
-                + "                <ns3:string name=\"title\">\r\n"
-                + "                    <ns3:value>Example title</ns3:value>\r\n"
-                + "                </ns3:string>\r\n"
-                + "            </ns3:metacard>\r\n";
-
-        return new ByteArrayInputStream(response.getBytes());
-    }
-
     private class FirstArgumentCapture implements Answer<BinaryContent> {
+
+        private InputStream returnInputStream;
+
+        private String inputArg;
 
         public FirstArgumentCapture() {
             this.returnInputStream = getSampleXmlStream();
@@ -786,10 +804,6 @@ public class TestOpenSearchSource {
         public FirstArgumentCapture(InputStream inputStream) {
             this.returnInputStream = inputStream;
         }
-
-        private InputStream returnInputStream;
-
-        private String inputArg;
 
         public String getInputArg() {
             return inputArg;

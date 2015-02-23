@@ -159,6 +159,12 @@
             <version>${ddf.security.app.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>ddf.security</groupId>
+            <artifactId>security-rest-cxfwrapper</artifactId>
+            <version>${ddf.security.app.version}</version>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -183,8 +189,13 @@
                             org.apache.abdera.i18n.iri, <!-- Element -->
                             org.apache.abdera.i18n.rfc4646, <!-- Element -->
                             com.ctc.wstx.stax, <!-- needed by FOMWriter -->
+                            org.codice.ddf.security.handler.api;resolution:=optional,
+                            org.codice.ddf.security.common;resolution:=optional,
                             *
                         </Import-Package>
+                        <Embed-Dependency>
+                            security-rest-cxfwrapper
+                        </Embed-Dependency>
                         <Private-Package>
                             ddf.catalog.source.opensearch,
                             ddf.catalog.data.impl,
