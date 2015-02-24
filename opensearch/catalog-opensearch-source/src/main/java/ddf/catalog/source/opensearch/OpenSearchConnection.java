@@ -43,7 +43,7 @@ public class OpenSearchConnection {
 
     protected SecureCxfClientFactory<OpenSearch> openSearchClient;
 
-    protected SecureCxfClientFactory restServiceClient;
+    protected SecureCxfClientFactory<RESTService> restServiceClient;
 
     private FilterAdapter filterAdapter;
 
@@ -64,12 +64,12 @@ public class OpenSearchConnection {
         this.filterAdapter = filterAdapter;
         this.username = username;
         this.password = password;
-        openSearchClient = new SecureCxfClientFactory<OpenSearch>(endpointUrl, OpenSearch.class,
-                username, password);
+        openSearchClient = new SecureCxfClientFactory<>(endpointUrl, OpenSearch.class, username,
+                password);
 
         RestUrl restUrl = newRestUrl(endpointUrl);
         if (restUrl != null) {
-            restServiceClient = new SecureCxfClientFactory(restUrl.buildUrl(), RESTService.class,
+            restServiceClient = new SecureCxfClientFactory<>(restUrl.buildUrl(), RESTService.class,
                     username, password);
         }
     }
@@ -131,9 +131,9 @@ public class OpenSearchConnection {
      */
     public WebClient getOpenSearchWebClient(Subject subject) throws SecurityServiceException {
         if (subject == null) {
-            return (WebClient) openSearchClient.getClientForSystem();
+            return openSearchClient.getWebClientForSystem();
         } else {
-            return (WebClient) openSearchClient.getClientForSubject(subject);
+            return openSearchClient.getWebClientForSubject(subject);
         }
     }
 
@@ -145,9 +145,9 @@ public class OpenSearchConnection {
     public WebClient getRestWebClient(Subject subject) throws SecurityServiceException {
         if (restServiceClient != null) {
             if (subject == null) {
-                return (WebClient) restServiceClient.getClientForSystem();
+                return restServiceClient.getWebClientForSystem();
             } else {
-                return (WebClient) restServiceClient.getClientForSubject(subject);
+                return restServiceClient.getWebClientForSubject(subject);
             }
         }
         return null;
@@ -181,8 +181,9 @@ public class OpenSearchConnection {
         Client tmp = null;
         if (url != null) {
             try {
-                tmp = (Client) new SecureCxfClientFactory<RESTService>(url, RESTService.class);
+                tmp = new SecureCxfClientFactory<>(url, RESTService.class).getWebClientForSystem();
             } catch (SecurityServiceException e) {
+                throw new RuntimeException(e);
             }
         }
         return tmp;
