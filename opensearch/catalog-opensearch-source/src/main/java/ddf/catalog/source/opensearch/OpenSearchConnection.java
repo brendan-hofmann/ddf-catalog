@@ -181,7 +181,7 @@ public class OpenSearchConnection {
         Client tmp = null;
         if (url != null) {
             try {
-                tmp = new SecureCxfClientFactory<>(url, RESTService.class).getWebClientForSystem();
+                tmp = new SecureCxfClientFactory<>(url, RESTService.class, username, password).getWebClientForSystem();
             } catch (SecurityServiceException e) {
                 throw new RuntimeException(e);
             }
