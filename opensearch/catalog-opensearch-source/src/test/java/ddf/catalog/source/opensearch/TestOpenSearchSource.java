@@ -22,7 +22,6 @@ import ddf.catalog.data.impl.MetacardImpl;
 import ddf.catalog.filter.FilterBuilder;
 import ddf.catalog.filter.proxy.adapter.GeotoolsFilterAdapterImpl;
 import ddf.catalog.filter.proxy.builder.GeotoolsFilterBuilder;
-import ddf.catalog.operation.Query;
 import ddf.catalog.operation.ResourceResponse;
 import ddf.catalog.operation.SourceResponse;
 import ddf.catalog.operation.impl.QueryImpl;
@@ -67,7 +66,6 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Mockito.mock;
@@ -220,11 +218,11 @@ public class TestOpenSearchSource {
 
         Client proxy = mock(Client.class);
 
-        when(openSearchConnection
-                .newRestClient(any(String.class), any(Query.class), any(String.class),
-                        any(Boolean.class))).thenReturn(proxy);
+        //        when(openSearchConnection
+        //                .newRestWebClient(any(String.class), any(Query.class), any(String.class),
+        //                        any(Boolean.class))).thenReturn(proxy);
 
-//        when(openSearchConnection.getWebClientFromClient(proxy)).thenReturn(client);
+        //        when(openSearchConnection.getWebClientFromClient(proxy)).thenReturn(client);
 
         when(clientResponse.getEntity())
                 .thenReturn(new BinaryContentImpl(getSampleXmlStream()).getInputStream());
@@ -626,11 +624,11 @@ public class TestOpenSearchSource {
 
         Client proxy = mock(Client.class);
 
-        when(openSearchConnection
-                .newRestClient(any(String.class), any(Query.class), any(String.class),
-                        any(Boolean.class))).thenReturn(proxy);
+        //        when(openSearchConnection
+        //                .newRestWebClient(any(String.class), any(Query.class), any(String.class),
+        //                        any(Boolean.class))).thenReturn(proxy);
 
-//        when(openSearchConnection.getWebClientFromClient(proxy)).thenReturn(client);
+        //        when(openSearchConnection.getWebClientFromClient(proxy)).thenReturn(client);
 
         when(clientResponse.getEntity())
                 .thenReturn(new BinaryContentImpl(getSampleXmlStream()).getInputStream())
@@ -729,11 +727,11 @@ public class TestOpenSearchSource {
 
         Client proxy = mock(Client.class);
 
-        when(openSearchConnection
-                .newRestClient(any(String.class), any(Query.class), any(String.class),
-                        any(Boolean.class))).thenReturn(proxy);
+        //        when(openSearchConnection
+        //                .newRestWebClient(any(String.class), any(Query.class), any(String.class),
+        //                        any(Boolean.class))).thenReturn(proxy);
 
-//        when(openSearchConnection.getWebClientFromClient(proxy)).thenReturn(client);
+        //        when(openSearchConnection.getWebClientFromClient(proxy)).thenReturn(client);
 
         Response clientResponse = mock(Response.class);
 

@@ -50,7 +50,6 @@ import org.apache.abdera.model.Feed;
 import org.apache.abdera.parser.Parser;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
-import org.apache.cxf.jaxrs.client.Client;
 import org.apache.cxf.jaxrs.client.WebClient;
 import org.geotools.filter.FilterTransformer;
 import org.slf4j.Logger;
@@ -269,41 +268,29 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
                 response = processResponse(responseStream, queryRequest);
             }
         } else {
-            Client restClient = openSearchConnection
-                    .newRestClient(endpointUrl, queryRequest.getQuery(), (String) metacardId,
-                            false);
+            WebClient restWebClient;
+            Object subjectObj = queryRequest.getProperties()
+                    .get(SecurityConstants.SECURITY_SUBJECT);
+            subject = (Subject) subjectObj;
+            restWebClient = openSearchConnection
+                    .newRestWebClient(endpointUrl, queryRequest.getQuery(), (String) metacardId,
+                            false, subject);
 
-            if (restClient != null) {
-                WebClient restWebClient;
-                try {
-                    if (queryRequest.hasProperties()) {
-                        Object subjectObj = queryRequest.getProperties()
-                                .get(SecurityConstants.SECURITY_SUBJECT);
-                        subject = (Subject) subjectObj;
-                        restWebClient = openSearchConnection.getRestWebClient(subject);
-                    } else {
-                        restWebClient = openSearchConnection.getRestWebClient(null);
-                    }
-                } catch (SecurityServiceException e) {
-                    throw new UnsupportedQueryException(e);
-                }
+            InputStream responseStream = performRequest(restWebClient);
 
-                InputStream responseStream = performRequest(restWebClient);
-
-                Metacard metacard = null;
-                List<Result> resultQueue = new ArrayList<>();
-                try {
-                    metacard = inputTransformer.transform(responseStream);
-                } catch (IOException | CatalogTransformerException e) {
-                    LOGGER.debug("Problem with transformation.", e);
-                }
-                if (metacard != null) {
-                    metacard.setSourceId(getId());
-                    ResultImpl result = new ResultImpl(metacard);
-                    resultQueue.add(result);
-                    response = new SourceResponseImpl(queryRequest, resultQueue);
-                    response.setHits(resultQueue.size());
-                }
+            Metacard metacard = null;
+            List<Result> resultQueue = new ArrayList<>();
+            try {
+                metacard = inputTransformer.transform(responseStream);
+            } catch (IOException | CatalogTransformerException e) {
+                LOGGER.debug("Problem with transformation.", e);
+            }
+            if (metacard != null) {
+                metacard.setSourceId(getId());
+                ResultImpl result = new ResultImpl(metacard);
+                resultQueue.add(result);
+                response = new SourceResponseImpl(queryRequest, resultQueue);
+                response.setHits(resultQueue.size());
             }
         }
 
@@ -733,85 +720,77 @@ public final class OpenSearchSource implements FederatedSource, ConfiguredServic
 
         if (serializableId != null) {
             String metacardId = serializableId.toString();
-            Client restClient = openSearchConnection
-                    .newRestClient(endpointUrl, null, metacardId, true);
 
-            if (restClient != null) {
-                Object binaryContent;
-                MimeType mimeType = null;
+            Object binaryContent;
+            MimeType mimeType = null;
 
-                WebClient webClient;
-                try {
-                    webClient = openSearchConnection.getRestWebClient(subject);
-                } catch (SecurityServiceException e) {
-                    throw new IOException(e);
+            WebClient webClient = openSearchConnection
+                    .newRestWebClient(endpointUrl, null, metacardId, true, subject);
+
+            // If a bytesToSkip property is present add range header
+            Map<String, Serializable> responseProperties = new HashMap<>();
+            if (requestProperties.containsKey(BYTES_TO_SKIP)) {
+                bytesToSkip = (Long) requestProperties.get(BYTES_TO_SKIP);
+                LOGGER.debug("Setting Range header with bytes to skip: {}", bytesToSkip);
+                constructRangeHeader(webClient, bytesToSkip);
+            }
+
+            Response clientResponse;
+            try {
+                clientResponse = webClient.get();
+            } catch (Exception e) {
+                LOGGER.warn("Error while trying to retreiveResource from OpenSearch Source", e);
+                throw new ResourceNotFoundException(COULD_NOT_RETRIEVE_RESOURCE_MESSAGE);
+            }
+
+            if (clientResponse == null) {
+                LOGGER.warn("Error while trying to retreiveResource from OpenSearch Source");
+                throw new ResourceNotFoundException(COULD_NOT_RETRIEVE_RESOURCE_MESSAGE);
+            }
+
+            Object contentType = clientResponse.getHeaders().get(HttpHeaders.CONTENT_TYPE);
+            try {
+                mimeType = new MimeType("application/octet-stream");
+                String content = null;
+                if (contentType != null) {
+                    if (((Collection) contentType).size() > 0) {
+                        content = (String) ((Collection) contentType).iterator().next();
+                    }
                 }
+                mimeType = new MimeType(content);
+            } catch (MimeTypeParseException e) {
+                LOGGER.debug("Error creating mime type with input [{}] defaulting to {}",
+                        contentType, "application/octet-stream");
+            }
 
-                // If a bytesToSkip property is present add range header
-                Map<String, Serializable> responseProperties = new HashMap<>();
+            binaryContent = clientResponse.getEntity();
+
+            if (binaryContent != null) {
+
                 if (requestProperties.containsKey(BYTES_TO_SKIP)) {
-                    bytesToSkip = (Long) requestProperties.get(BYTES_TO_SKIP);
-                    LOGGER.debug("Setting Range header with bytes to skip: {}", bytesToSkip);
-                    constructRangeHeader(webClient, bytesToSkip);
-                }
 
-                Response clientResponse;
-                try {
-                    clientResponse = webClient.get();
-                } catch (Exception e) {
-                    LOGGER.warn("Error while trying to retreiveResource from OpenSearch Source", e);
-                    throw new ResourceNotFoundException(COULD_NOT_RETRIEVE_RESOURCE_MESSAGE);
-                }
+                    // Since we sent a range header an accept-ranges header should be returned if the
+                    // remote endpoint support it.  If is not present, the inputStream hasn't skipped ahead
+                    // by the given number of bytes, so we need to take care of it here.
+                    String rangeHeader = clientResponse.getHeaderString(HEADER_ACCEPT_RANGES);
 
-                if (clientResponse == null) {
-                    LOGGER.warn("Error while trying to retreiveResource from OpenSearch Source");
-                    throw new ResourceNotFoundException(COULD_NOT_RETRIEVE_RESOURCE_MESSAGE);
-                }
-
-                Object contentType = clientResponse.getHeaders().get(HttpHeaders.CONTENT_TYPE);
-                try {
-                    mimeType = new MimeType("application/octet-stream");
-                    String content = null;
-                    if (contentType != null) {
-                        if (((Collection) contentType).size() > 0) {
-                            content = (String) ((Collection) contentType).iterator().next();
-                        }
+                    //DDF-643: Set response property indicating remote JSON Source did the byte skipping
+                    // so that Catalog Framework's download manager will not try to also skip bytes.
+                    if ((rangeHeader != null) && (rangeHeader.equals(BYTES))) {
+                        LOGGER.info("Adding {} to response properties with value = {}",
+                                BYTES_SKIPPED, true);
+                        responseProperties.put(BYTES_SKIPPED, true);
                     }
-                    mimeType = new MimeType(content);
-                } catch (MimeTypeParseException e) {
-                    LOGGER.debug("Error creating mime type with input [{}] defaulting to {}",
-                            contentType, "application/octet-stream");
                 }
 
-                binaryContent = clientResponse.getEntity();
+                LOGGER.trace("EXIT: {}", methodName);
 
-                if (binaryContent != null) {
-
-                    if (requestProperties.containsKey(BYTES_TO_SKIP)) {
-
-                        // Since we sent a range header an accept-ranges header should be returned if the
-                        // remote endpoint support it.  If is not present, the inputStream hasn't skipped ahead
-                        // by the given number of bytes, so we need to take care of it here.
-                        String rangeHeader = clientResponse.getHeaderString(HEADER_ACCEPT_RANGES);
-
-                        //DDF-643: Set response property indicating remote JSON Source did the byte skipping
-                        // so that Catalog Framework's download manager will not try to also skip bytes.
-                        if ((rangeHeader != null) && (rangeHeader.equals(BYTES))) {
-                            LOGGER.info("Adding {} to response properties with value = {}",
-                                    BYTES_SKIPPED, true);
-                            responseProperties.put(BYTES_SKIPPED, true);
-                        }
-                    }
-
-                    LOGGER.trace("EXIT: {}", methodName);
-
-                    //DDF-643
-                    ResourceResponseImpl resourceResponse = new ResourceResponseImpl(
-                            new ResourceImpl((InputStream) binaryContent, mimeType,
-                                    getId() + "_Resource_Retrieval:" + System.currentTimeMillis()));
-                    resourceResponse.setProperties(responseProperties);
-                    return resourceResponse;
-                }
+                //DDF-643
+                ResourceResponseImpl resourceResponse = new ResourceResponseImpl(
+                        new ResourceImpl((InputStream) binaryContent, mimeType,
+                                getId() + "_Resource_Retrieval:" + System.currentTimeMillis()));
+                resourceResponse.setProperties(responseProperties);
+                return resourceResponse;
             }
         }
 

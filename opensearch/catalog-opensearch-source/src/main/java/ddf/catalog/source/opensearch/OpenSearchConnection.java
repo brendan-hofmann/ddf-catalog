@@ -20,7 +20,6 @@ import ddf.catalog.source.UnsupportedQueryException;
 import ddf.security.Subject;
 import ddf.security.service.SecurityServiceException;
 import org.apache.commons.lang.StringUtils;
-import org.apache.cxf.jaxrs.client.Client;
 import org.apache.cxf.jaxrs.client.WebClient;
 import org.codice.ddf.cxf.SecureCxfClientFactory;
 import org.codice.ddf.endpoints.OpenSearch;
@@ -43,8 +42,6 @@ public class OpenSearchConnection {
 
     protected SecureCxfClientFactory<OpenSearch> openSearchClient;
 
-    protected SecureCxfClientFactory<RESTService> restServiceClient;
-
     private FilterAdapter filterAdapter;
 
     private String username;
@@ -64,14 +61,7 @@ public class OpenSearchConnection {
         this.filterAdapter = filterAdapter;
         this.username = username;
         this.password = password;
-        openSearchClient = new SecureCxfClientFactory<>(endpointUrl, OpenSearch.class, username,
-                password);
-
-        RestUrl restUrl = newRestUrl(endpointUrl);
-        if (restUrl != null) {
-            restServiceClient = new SecureCxfClientFactory<>(restUrl.buildUrl(), RESTService.class,
-                    username, password);
-        }
+        openSearchClient = new SecureCxfClientFactory<>(endpointUrl, OpenSearch.class, null, true);
     }
 
     /**
@@ -86,9 +76,9 @@ public class OpenSearchConnection {
         String url = null;
         RestFilterDelegate delegate = null;
         RestUrl restUrl = newRestUrl(endpointUrl);
-        restUrl.setRetrieveResource(retrieveResource);
 
         if (restUrl != null) {
+            restUrl.setRetrieveResource(retrieveResource);
             delegate = new RestFilterDelegate(restUrl);
         }
 
@@ -131,26 +121,10 @@ public class OpenSearchConnection {
      */
     public WebClient getOpenSearchWebClient(Subject subject) throws SecurityServiceException {
         if (subject == null) {
-            return openSearchClient.getWebClientForSystem();
+            return openSearchClient.getWebClientForBasicAuth(username, password);
         } else {
             return openSearchClient.getWebClientForSubject(subject);
         }
-    }
-
-    /**
-     * Returns the DDF REST {@link org.apache.cxf.jaxrs.client.WebClient}
-     *
-     * @return {@link org.apache.cxf.jaxrs.client.WebClient}
-     */
-    public WebClient getRestWebClient(Subject subject) throws SecurityServiceException {
-        if (restServiceClient != null) {
-            if (subject == null) {
-                return restServiceClient.getWebClientForSystem();
-            } else {
-                return restServiceClient.getWebClientForSubject(subject);
-            }
-        }
-        return null;
     }
 
     /**
@@ -163,8 +137,8 @@ public class OpenSearchConnection {
      * @param retrieveResource - true if this is a resource request
      * @return {@link org.apache.cxf.jaxrs.client.Client}
      */
-    public Client newRestClient(String url, Query query, String metacardId,
-            boolean retrieveResource) {
+    public WebClient newRestWebClient(String url, Query query, String metacardId,
+            boolean retrieveResource, Subject subject) {
         if (query != null) {
             url = createRestUrl(query, url, retrieveResource);
         } else {
@@ -178,10 +152,16 @@ public class OpenSearchConnection {
                 url = restUrl.buildUrl();
             }
         }
-        Client tmp = null;
+        WebClient tmp = null;
         if (url != null) {
             try {
-                tmp = new SecureCxfClientFactory<>(url, RESTService.class, username, password).getWebClientForSystem();
+                if (subject != null) {
+                    tmp = new SecureCxfClientFactory<>(url, RESTService.class, null, true)
+                            .getWebClientForSubject(subject);
+                } else {
+                    tmp = new SecureCxfClientFactory<>(url, RESTService.class, null, true)
+                            .getWebClientForBasicAuth(username, password);
+                }
             } catch (SecurityServiceException e) {
                 throw new RuntimeException(e);
             }
