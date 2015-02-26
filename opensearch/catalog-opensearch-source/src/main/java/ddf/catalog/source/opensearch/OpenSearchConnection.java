@@ -61,7 +61,8 @@ public class OpenSearchConnection {
         this.filterAdapter = filterAdapter;
         this.username = username;
         this.password = password;
-        openSearchClient = new SecureCxfClientFactory<>(endpointUrl, OpenSearch.class, null, true);
+        openSearchClient = new SecureCxfClientFactory<>(endpointUrl, OpenSearch.class, null, null,
+                true);
     }
 
     /**
@@ -156,10 +157,10 @@ public class OpenSearchConnection {
         if (url != null) {
             try {
                 if (subject != null) {
-                    tmp = new SecureCxfClientFactory<>(url, RESTService.class, null, true)
+                    tmp = new SecureCxfClientFactory<>(url, RESTService.class, null, null, true)
                             .getWebClientForSubject(subject);
                 } else {
-                    tmp = new SecureCxfClientFactory<>(url, RESTService.class, null, true)
+                    tmp = new SecureCxfClientFactory<>(url, RESTService.class, null, null, true)
                             .getWebClientForBasicAuth(username, password);
                 }
             } catch (SecurityServiceException e) {
