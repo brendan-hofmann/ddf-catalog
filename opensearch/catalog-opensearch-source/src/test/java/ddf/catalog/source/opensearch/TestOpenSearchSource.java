@@ -22,6 +22,7 @@ import ddf.catalog.data.impl.MetacardImpl;
 import ddf.catalog.filter.FilterBuilder;
 import ddf.catalog.filter.proxy.adapter.GeotoolsFilterAdapterImpl;
 import ddf.catalog.filter.proxy.builder.GeotoolsFilterBuilder;
+import ddf.catalog.operation.Query;
 import ddf.catalog.operation.ResourceResponse;
 import ddf.catalog.operation.SourceResponse;
 import ddf.catalog.operation.impl.QueryImpl;
@@ -31,11 +32,11 @@ import ddf.catalog.resource.ResourceNotSupportedException;
 import ddf.catalog.source.UnsupportedQueryException;
 import ddf.catalog.transform.CatalogTransformerException;
 import ddf.catalog.transform.InputTransformer;
+import ddf.security.Subject;
 import ddf.security.service.SecurityServiceException;
 import junit.framework.Assert;
 import org.apache.commons.httpclient.NameValuePair;
 import org.apache.commons.httpclient.util.ParameterParser;
-import org.apache.cxf.jaxrs.client.Client;
 import org.apache.cxf.jaxrs.client.WebClient;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -66,6 +67,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
+import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
 import static org.mockito.Mockito.mock;
@@ -216,13 +218,13 @@ public class TestOpenSearchSource {
 
         when(clientResponse.getStatus()).thenReturn(Response.Status.OK.getStatusCode());
 
-        Client proxy = mock(Client.class);
+        WebClient proxy = mock(WebClient.class);
 
-        //        when(openSearchConnection
-        //                .newRestWebClient(any(String.class), any(Query.class), any(String.class),
-        //                        any(Boolean.class))).thenReturn(proxy);
+        when(openSearchConnection
+                .newRestWebClient(any(String.class), any(Query.class), any(String.class),
+                        any(Boolean.class), any(Subject.class))).thenReturn(proxy);
 
-        //        when(openSearchConnection.getWebClientFromClient(proxy)).thenReturn(client);
+        when(proxy.get()).thenReturn(clientResponse);
 
         when(clientResponse.getEntity())
                 .thenReturn(new BinaryContentImpl(getSampleXmlStream()).getInputStream());
@@ -343,9 +345,7 @@ public class TestOpenSearchSource {
             when(inputTransformer.transform(isA(InputStream.class))).thenReturn(generatedMetacard);
             when(inputTransformer.transform(isA(InputStream.class), isA(String.class)))
                     .thenReturn(generatedMetacard);
-        } catch (IOException e) {
-            fail();
-        } catch (CatalogTransformerException e) {
+        } catch (IOException | CatalogTransformerException e) {
             fail();
         }
         source.setInputTransformer(inputTransformer);
@@ -453,7 +453,7 @@ public class TestOpenSearchSource {
 
         OpenSearchSource source = givenSource(answer);
 
-        Map<String, Serializable> requestProperties = new HashMap<String, Serializable>();
+        Map<String, Serializable> requestProperties = new HashMap<>();
 
         requestProperties.put(Metacard.ID, SAMPLE_ID);
 
@@ -473,11 +473,11 @@ public class TestOpenSearchSource {
 
         OpenSearchSource source = givenSource(answer);
 
-        Map<String, Serializable> requestProperties = new HashMap<String, Serializable>();
+        Map<String, Serializable> requestProperties = new HashMap<>();
 
         requestProperties.put(Metacard.ID, SAMPLE_ID);
 
-        requestProperties.put(OpenSearchSource.BYTES_TO_SKIP, Long.valueOf(2));
+        requestProperties.put(OpenSearchSource.BYTES_TO_SKIP, (long) 2);
 
         // when
         ResourceResponse response = source.retrieveResource(null, requestProperties);
@@ -545,7 +545,7 @@ public class TestOpenSearchSource {
 
         source.setEndpointUrl("http://example.com/q?s=^LMT");
 
-        Map<String, Serializable> requestProperties = new HashMap<String, Serializable>();
+        Map<String, Serializable> requestProperties = new HashMap<>();
 
         requestProperties.put(Metacard.ID, SAMPLE_ID);
 
@@ -585,7 +585,7 @@ public class TestOpenSearchSource {
 
         source.setEndpointUrl("unknownProtocol://localhost:8181/services/catalog/query");
 
-        Map<String, Serializable> requestProperties = new HashMap<String, Serializable>();
+        Map<String, Serializable> requestProperties = new HashMap<>();
 
         requestProperties.put(Metacard.ID, SAMPLE_ID);
 
@@ -622,13 +622,13 @@ public class TestOpenSearchSource {
 
         when(client.get()).thenReturn(clientResponse);
 
-        Client proxy = mock(Client.class);
+        WebClient proxy = mock(WebClient.class);
 
-        //        when(openSearchConnection
-        //                .newRestWebClient(any(String.class), any(Query.class), any(String.class),
-        //                        any(Boolean.class))).thenReturn(proxy);
+        when(openSearchConnection
+                .newRestWebClient(any(String.class), any(Query.class), any(String.class),
+                        any(Boolean.class), any(Subject.class))).thenReturn(proxy);
 
-        //        when(openSearchConnection.getWebClientFromClient(proxy)).thenReturn(client);
+        when(proxy.get()).thenReturn(clientResponse);
 
         when(clientResponse.getEntity())
                 .thenReturn(new BinaryContentImpl(getSampleXmlStream()).getInputStream())
@@ -671,8 +671,7 @@ public class TestOpenSearchSource {
             throws MalformedURLException, URISyntaxException {
         URL url = new URI(answer.getInputArg()).toURL();
         ParameterParser paramParser = new ParameterParser();
-        List<NameValuePair> pairs = paramParser.parse(url.getQuery(), '&');
-        return pairs;
+        return paramParser.parse(url.getQuery(), '&');
     }
 
     private void verifyOpenSearchUrl(List<NameValuePair> pairs, NameValuePair... answers) {
@@ -711,7 +710,7 @@ public class TestOpenSearchSource {
     }
 
     private ConcurrentHashMap<String, String> createMapFor(List<NameValuePair> pairs) {
-        ConcurrentHashMap<String, String> map = new ConcurrentHashMap<String, String>();
+        ConcurrentHashMap<String, String> map = new ConcurrentHashMap<>();
 
         for (NameValuePair pair : pairs) {
             map.put(pair.getName(), pair.getValue());
@@ -725,17 +724,16 @@ public class TestOpenSearchSource {
 
         OpenSearchConnection openSearchConnection = mock(OpenSearchConnection.class);
 
-        Client proxy = mock(Client.class);
+        WebClient proxy = mock(WebClient.class);
 
-        //        when(openSearchConnection
-        //                .newRestWebClient(any(String.class), any(Query.class), any(String.class),
-        //                        any(Boolean.class))).thenReturn(proxy);
-
-        //        when(openSearchConnection.getWebClientFromClient(proxy)).thenReturn(client);
+        when(openSearchConnection
+                .newRestWebClient(any(String.class), any(Query.class), any(String.class),
+                        any(Boolean.class), any(Subject.class))).thenReturn(proxy);
 
         Response clientResponse = mock(Response.class);
 
         when(client.get()).thenReturn(clientResponse);
+        when(proxy.get()).thenReturn(clientResponse);
 
         when(clientResponse.getEntity()).thenReturn(getBinaryData());
 
@@ -744,7 +742,7 @@ public class TestOpenSearchSource {
 
         when(openSearchConnection.getOpenSearchWebClient(null)).thenReturn(client);
 
-        MultivaluedMap<String, Object> headers = new MultivaluedHashMap<String, Object>();
+        MultivaluedMap<String, Object> headers = new MultivaluedHashMap<>();
         headers.put(HttpHeaders.CONTENT_TYPE, Arrays.<Object>asList("application/octet-stream"));
 
         when(clientResponse.getHeaders()).thenReturn(headers);
@@ -769,9 +767,7 @@ public class TestOpenSearchSource {
             when(inputTransformer.transform(isA(InputStream.class))).thenReturn(generatedMetacard);
             when(inputTransformer.transform(isA(InputStream.class), isA(String.class)))
                     .thenReturn(generatedMetacard);
-        } catch (IOException e) {
-            fail();
-        } catch (CatalogTransformerException e) {
+        } catch (IOException | CatalogTransformerException e) {
             fail();
         }
         return inputTransformer;
